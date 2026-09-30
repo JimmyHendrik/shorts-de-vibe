@@ -46,7 +46,13 @@ class Idempotency
             return response()->json(['message' => 'Esta ação já está em processamento.'], 409);
         }
 
-        $response = $next($request);
+        try {
+            $response = $next($request);
+        } catch (\Throwable $exception) {
+            // Uma exceção não deve deixar a ação bloqueada até expirar o TTL.
+            $record->delete();
+            throw $exception;
+        }
 
         if ($response->isSuccessful()) {
             $payload = json_decode((string) $response->getContent(), true);

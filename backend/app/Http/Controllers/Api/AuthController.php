@@ -86,6 +86,10 @@ class AuthController extends Controller
             ], 403);
         }
 
+        // Revoga tokens antigos para reduzir o tempo de exposição de sessões
+        // que possam ter sido copiadas do navegador.
+        $user->tokens()->delete();
+
         return response()->json([
             'user' => $user,
             'token' => $user->createToken('vibe-web')->plainTextToken,

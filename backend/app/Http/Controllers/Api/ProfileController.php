@@ -8,6 +8,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use App\Services\CloudinaryImageUploader;
+use App\Models\Comment;
+use App\Models\Favorite;
+use App\Models\Video;
+use App\Models\VideoLike;
 use RuntimeException;
 
 class ProfileController extends Controller
@@ -137,18 +141,20 @@ class ProfileController extends Controller
 
     private function userData($user, bool $includePrivate): array
     {
-        $stats = $user->videos()
-            ->withCount(['likes', 'comments', 'favorites'])
-            ->get(['id', 'view_count', 'shares_count'])
-            ->reduce(function (array $carry, $video): array {
-                $carry['likes'] += (int) $video->likes_count;
-                $carry['comments'] += (int) $video->comments_count;
-                $carry['favorites'] += (int) $video->favorites_count;
-                $carry['shares'] += (int) $video->shares_count;
-                $carry['views'] += (int) $video->view_count;
-                $carry['top_video_views'] = max($carry['top_video_views'], (int) $video->view_count);
-                return $carry;
-            }, ['likes' => 0, 'comments' => 0, 'favorites' => 0, 'shares' => 0, 'views' => 0, 'top_video_views' => 0]);
+        $videoStats = Video::query()
+            ->where('user_id', $user->id)
+            ->selectRaw('COALESCE(SUM(view_count), 0) AS views')
+            ->selectRaw('COALESCE(SUM(shares_count), 0) AS shares')
+            ->selectRaw('COALESCE(MAX(view_count), 0) AS top_video_views')
+            ->first();
+        $stats = [
+            'likes' => VideoLike::whereHas('video', fn ($query) => $query->where('user_id', $user->id))->count(),
+            'comments' => Comment::whereHas('video', fn ($query) => $query->where('user_id', $user->id))->count(),
+            'favorites' => Favorite::whereHas('video', fn ($query) => $query->where('user_id', $user->id))->count(),
+            'shares' => (int) ($videoStats->shares ?? 0),
+            'views' => (int) ($videoStats->views ?? 0),
+            'top_video_views' => (int) ($videoStats->top_video_views ?? 0),
+        ];
         $stats['average_views'] = ($user->videos_count ?? 0) > 0
             ? (int) round($stats['views'] / $user->videos_count)
             : 0;

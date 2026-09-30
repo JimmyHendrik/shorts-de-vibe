@@ -25,6 +25,7 @@ class FollowController extends Controller
     public function store(Request $request, User $user): JsonResponse
     {
         abort_if($request->user()->is($user), 422, 'Você não pode seguir a si mesmo.');
+        abort_if($user->is_private, 403, 'Este perfil é privado e não aceita seguidores diretamente.');
         abort_unless($user->allow_following, 403, 'Este perfil não aceita novos seguidores.');
         $changes = $request->user()->following()->syncWithoutDetaching([$user->id]);
         if (in_array($user->id, $changes['attached'], true)) {

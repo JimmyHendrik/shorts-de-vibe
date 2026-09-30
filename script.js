@@ -2333,7 +2333,8 @@ async function abrirNotificacoes(onlyMentions = false) {
         if (!payload.data?.length) {
             notificationsList.innerHTML = '<p class="notifications-empty">Nenhuma notificação ainda.</p>';
         } else {
-            payload.data.filter(notification => !onlyMentions || notification.type === 'mention').forEach(notification => {
+            const visibleNotifications = payload.data.filter(notification => !onlyMentions || notification.type === 'mention');
+            visibleNotifications.forEach(notification => {
                 const item = document.createElement('article');
                 item.className = `notification-item${notification.read_at ? '' : ' unread'}`;
                 const actor = notification.actor?.username ? `@${notification.actor.username}` : 'Alguém';
@@ -2345,8 +2346,14 @@ async function abrirNotificacoes(onlyMentions = false) {
                 item.tabIndex = 0;
                 notificationsList.appendChild(item);
             });
+            if (onlyMentions) {
+                await Promise.all(visibleNotifications.map(notification =>
+                    apiRequest(`/notifications/${notification.id}/read`, { method: 'POST' }),
+                ));
+            } else {
+                await apiRequest('/notifications/read-all', { method: 'POST' });
+            }
         }
-        await apiRequest('/notifications/read-all', { method: 'POST' });
         atualizarBadgeNotificacoes(0);
     } catch (error) {
         showTextMessage(notificationsList, error.message || 'Não foi possível carregar as notificações.');
@@ -2404,8 +2411,13 @@ async function carregarModeracao() {
             resolve.type = 'button'; resolve.textContent = 'Marcar como resolvida';
             resolve.addEventListener('click', async () => {
                 resolve.disabled = true;
-                await apiRequest(`/moderation/reports/${report.id}`, { method: 'PATCH', body: { status: 'resolved' } });
-                await carregarModeracao();
+                try {
+                    await apiRequest(`/moderation/reports/${report.id}`, { method: 'PATCH', body: { status: 'resolved' } });
+                    await carregarModeracao();
+                } catch (error) {
+                    setFeedStatus(error.message || 'Não foi possível atualizar a denúncia.', { visible: true });
+                    resolve.disabled = false;
+                }
             });
             item.appendChild(resolve);
             notificationsList.appendChild(item);
