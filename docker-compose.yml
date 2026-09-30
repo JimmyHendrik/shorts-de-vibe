@@ -1,0 +1,26 @@
+# Start with: docker compose --env-file backend/.env up -d
+name: vibe
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: vibe-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-vibe}
+      MYSQL_USER: ${DB_USERNAME:-vibe}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no ambiente do Docker Compose}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Defina MYSQL_ROOT_PASSWORD no ambiente do Docker Compose}
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$${MYSQL_ROOT_PASSWORD}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql_data:
+    name: vibe_mysql_data

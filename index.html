@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b0b10">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' data: https://cdnjs.cloudflare.com; img-src 'self' data: blob: https://res.cloudinary.com; media-src 'self' blob: https://res.cloudinary.com; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 https:; worker-src 'self'">
+    <link rel="icon" type="image/png" href="img/favicon.png">
+    <link rel="apple-touch-icon" href="img/favicon.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.css">
+    <link rel="stylesheet" href="style.css">
+    <title>Vibe — vídeos curtos</title>
+</head>
+
+<body data-api-base-url="" data-demo-fallback="false">
+    <!--header/cabeçalho-->
+    <div class="app-container" id="top">
+        <section class="welcome-gate" id="welcome-gate" aria-labelledby="welcome-title" hidden>
+            <div class="welcome-card">
+                <img src="img/vibe-mark.png" alt="" class="welcome-mark">
+                <h1 id="welcome-title">Entre no Vibe</h1>
+                <p>Faça login para interagir ou continue como visitante para assistir aos vídeos.</p>
+                <button class="welcome-primary" id="welcome-login" type="button">Entrar ou criar conta</button>
+                <button class="welcome-secondary" id="welcome-visitor" type="button">Assistir como visitante</button>
+            </div>
+        </section>
+        <header class="app-header">
+            <a class="brand" href="#top" aria-label="Vibe, voltar ao início">
+                <img src="img/vibe-mark.png" alt="" class="brand-mark">
+                <span>vibe</span>
+            </a>
+            <button class="header-item active" id="btnFollowing" type="button">Seguindo</button>
+            <button class="header-item" id="btnSearch" type="button">Pesquisar</button>
+        </header>
+
+        <section class="search-toolbar" id="search-toolbar" aria-label="Pesquisar vídeos" hidden>
+            <form id="search-form">
+                <label class="visually-hidden" for="search-input">Buscar vídeos</label>
+                <input id="search-input" type="search" maxlength="80" placeholder="Buscar vídeos, usuários ou hashtags"
+                    autocomplete="off" list="search-recent-list">
+                <datalist id="search-recent-list"></datalist>
+                <select id="search-sort" aria-label="Ordenar resultados">
+                    <option value="relevance">Relevantes</option>
+                    <option value="popular">Mais populares</option>
+                    <option value="recent">Mais recentes</option>
+                    <option value="longest">Mais longos</option>
+                </select>
+                <button type="submit" aria-label="Pesquisar"><i class="ri-search-line" aria-hidden="true"></i></button>
+            </form>
+            <button class="search-close" id="search-close" type="button" aria-label="Fechar pesquisa"><i
+                    class="ri-close-line" aria-hidden="true"></i></button>
+            <p id="search-status" role="status" aria-live="polite"></p>
+        </section>
+        <main class="search-page" id="search-page" aria-label="Resultados da pesquisa" hidden>
+            <nav class="search-tabs" aria-label="Filtros de pesquisa">
+                <button class="active" type="button" data-search-filter="top">Top</button>
+                <button type="button" data-search-filter="videos">Vídeos</button>
+                <button type="button" data-search-filter="users">Usuários</button>
+            </nav>
+            <section class="discover-suggestions" id="discover-suggestions" aria-labelledby="discover-suggestions-title" hidden>
+                <div class="discover-suggestions-heading">
+                    <h2 id="discover-suggestions-title">Pessoas para seguir</h2>
+                    <button type="button" id="discover-suggestions-refresh">Atualizar</button>
+                </div>
+                <div class="discover-suggestions-list" id="discover-suggestions-list"></div>
+            </section>
+            <div class="search-results-grid" id="search-results-grid"></div>
+        </main>
+
+        <!--body/principal-->
+        <main class="videos-container" aria-label="Feed de vídeos"></main>
+        <p class="visually-hidden" id="feed-status" role="status" aria-live="polite"></p>
+        <div class="feed-notice" id="feed-notice" hidden>
+            <p id="feed-notice-text" role="status" aria-live="polite"></p>
+            <button id="retry-feed" type="button">Tentar novamente</button>
+            <button id="dismiss-feed-notice" type="button" aria-label="Fechar aviso">×</button>
+        </div>
+        <div class="audio-control" id="audio-control" aria-label="Controle de áudio">
+            <input class="volume-range" id="volume-range" type="range" min="0" max="1" step="0.01" value="0"
+                aria-label="Volume">
+            <button class="audio-unlock" id="audio-unlock" type="button" aria-label="Ativar som">
+                <i id="audio-icon" class="ri-volume-mute-line" aria-hidden="true"></i>
+            </button>
+        </div>
+
+        <div class="publish-modal" id="publish-modal" aria-hidden="true">
+            <section class="publish-content" role="dialog" aria-modal="true" aria-labelledby="publish-title">
+                <div class="profile-header">
+                    <h2 id="publish-title">Adicionar vídeo</h2><button class="close-publish" type="button"
+                        aria-label="Fechar"><i class="ri-close-line"></i></button>
+                </div>
+                <p id="publish-status">Escolha uma opção para publicar no Vibe.</p>
+                <div class="publish-actions">
+                    <button id="publish-file" type="button"><i class="ri-upload-2-line"></i><span>Enviar
+                            vídeo</span></button>
+                    <button id="publish-record" type="button"><i class="ri-camera-3-line"></i><span>Gravar
+                            agora</span></button>
+                </div>
+                <video id="publish-preview" playsinline muted hidden></video>
+                <button id="publish-stop" class="publish-stop" type="button" hidden>Parar gravação</button>
+                <div class="publish-editor" id="publish-editor" hidden>
+                    <video id="publish-detail-preview" class="publish-detail-preview" playsinline muted
+                        controls></video>
+                    <div class="publish-cover-picker">
+                        <label for="publish-cover-range">Capa do vídeo</label>
+                        <canvas id="publish-cover-canvas" width="320" height="180" aria-label="Prévia da capa"></canvas>
+                        <input id="publish-cover-range" type="range" min="0" max="0" step="0.1" value="0"
+                            aria-label="Escolher momento da capa">
+                    </div>
+                    <div class="publish-trim-grid">
+                        <label>Início (s)<input id="publish-trim-start" type="number" min="0" step="0.1"
+                                value="0"></label>
+                        <label>Fim (s)<input id="publish-trim-end" type="number" min="0" step="0.1" value="0"></label>
+                    </div>
+                    <div class="publish-trim-time" id="publish-trim-time">0:00 – 0:00</div>
+                    <div class="publish-trim-timeline" id="publish-trim-timeline">
+                        <video id="publish-trim-video" muted playsinline preload="metadata" aria-label="Prévia do corte"></video>
+                        <canvas id="publish-trim-strip" class="publish-trim-strip" width="640" height="76" aria-hidden="true"></canvas>
+                        <div class="publish-trim-selection" id="publish-trim-selection"></div>
+                        <input id="publish-trim-start-range" type="range" min="0" max="0" step="0.1" value="0" aria-label="Início do corte">
+                        <input id="publish-trim-end-range" type="range" min="0" max="0" step="0.1" value="0" aria-label="Fim do corte">
+                    </div>
+                    <label class="publish-description-label" for="publish-description">Descrição</label>
+                    <textarea id="publish-description" maxlength="1000"
+                        placeholder="Escreva uma descrição, use #hashtags e @menções"></textarea>
+                    <div class="publish-description-count" id="publish-description-count">0/1000 · # 0/10</div>
+                    <label for="publish-location">Localização (opcional)</label>
+                    <input id="publish-location" class="publish-location" type="text" maxlength="120"
+                        placeholder="Adicionar localização">
+                    <label for="publish-visibility">Quem pode ver esta publicação</label>
+                    <select id="publish-visibility">
+                        <option value="public">Todos</option>
+                        <option value="followers">Seguidores</option>
+                        <option value="private">Somente eu</option>
+                    </select>
+                    <label for="publish-schedule">Agendar publicação (opcional)</label>
+                    <input id="publish-schedule" class="publish-location" type="datetime-local">
+                    <label class="publish-check"><input id="publish-allow-comments" type="checkbox" checked> Permitir
+                        comentários</label>
+                    <label class="publish-check"><input id="publish-allow-reuse" type="checkbox" checked> Permitir
+                        reutilização do conteúdo</label>
+                    <label class="publish-check"><input id="publish-ai-generated" type="checkbox"> Conteúdo gerado por
+                        IA</label>
+                    <label class="publish-check"><input id="publish-age-restricted" type="checkbox"> Restringir para
+                        maiores de 18 anos</label>
+                    <label class="publish-check"><input id="publish-high-quality" type="checkbox" checked> Priorizar
+                        publicação em alta qualidade</label>
+                    <div class="publish-editor-actions">
+                        <button id="publish-back" type="button">Voltar</button>
+                        <button id="publish-submit" type="button">Publicar agora</button>
+                    </div>
+                    <div class="publish-progress" id="publish-progress" hidden aria-live="polite">
+                        <div class="publish-progress-circle" id="publish-progress-circle"><span id="publish-progress-value">0%</span></div>
+                        <p id="publish-progress-label">Enviando vídeo…</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- parte do comentario-->
+        <div class="comments-modal">
+            <div class="comments-content">
+
+                <div class="comments-header">
+                    <span id="comments-title">Comentários</span>
+                    <button class="close-comments" type="button" aria-label="Fechar comentários">
+                        <i class="ri-close-line"></i>
+                    </button>
+                </div>
+
+                <button class="comments-notice" id="comments-notice" type="button" hidden></button>
+                <div class="comments-list">
+                </div>
+
+                <div class="comment-input">
+
+                    <input type="text" placeholder="Adicionar comentário">
+
+                    <button type="button" aria-label="Enviar comentário">
+                        <i class="ri-send-plane-fill"></i>
+                    </button>
+
+                </div>
+            </div>
+
+        </div>
+
+        <div class="video-options-modal" id="video-options-modal" aria-hidden="true">
+            <section class="video-options-content" role="dialog" aria-modal="true" aria-labelledby="video-options-title">
+                <div class="comments-header"><strong id="video-options-title">Opções do vídeo</strong><button class="close-video-options" type="button" aria-label="Fechar opções">×</button></div>
+                <button type="button" data-video-option="download"><i class="ri-download-2-line"></i> Baixar vídeo</button>
+                <button type="button" data-video-option="playlist"><i class="ri-play-list-add-line"></i> Adicionar à playlist</button>
+                <button type="button" data-video-option="copy">Copiar link</button>
+                <button type="button" data-video-option="hide">Não tenho interesse</button>
+                <button type="button" data-video-option="user">Ocultar vídeos deste usuário</button>
+                <button type="button" data-video-option="report">Denunciar vídeo</button>
+            </section>
+        </div>
+
+        <div class="auth-modal" id="auth-modal" aria-hidden="true">
+            <section class="auth-content" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+                <div class="auth-header">
+                    <h2 id="auth-title">Entrar no Vibe</h2>
+                    <button class="close-auth" type="button" aria-label="Fechar autenticação">
+                        <i class="ri-close-line"></i>
+                    </button>
+                </div>
+
+                <div class="auth-account" id="auth-account" hidden>
+                    <p>Você está conectado como <strong id="auth-user-name"></strong>.</p>
+                    <button class="auth-submit" id="logout-button" type="button">Sair da conta</button>
+                </div>
+
+                <form class="auth-form" id="auth-form">
+                    <label class="auth-field auth-register-only" for="auth-name">
+                        Nome
+                        <input id="auth-name" name="name" type="text" autocomplete="name" maxlength="100">
+                    </label>
+
+                    <label class="auth-field auth-register-only" for="auth-username">
+                        Usuário
+                        <input id="auth-username" name="username" type="text" autocomplete="username" maxlength="30">
+                    </label>
+
+                    <label class="auth-field" for="auth-email">
+                        E-mail
+                        <input id="auth-email" name="email" type="email" autocomplete="email" required>
+                    </label>
+
+                    <label class="auth-field" for="auth-password">
+                        Senha
+                        <span class="password-input-wrap">
+                            <input id="auth-password" name="password" type="password" autocomplete="current-password"
+                                minlength="8" required>
+                            <button class="password-toggle" type="button" data-password-toggle="auth-password"
+                                aria-label="Mostrar senha" aria-pressed="false"><i class="ri-eye-line" aria-hidden="true"></i></button>
+                        </span>
+                    </label>
+
+                    <label class="auth-field auth-register-only" for="auth-password-confirmation">
+                        Confirmar senha
+                        <span class="password-input-wrap">
+                            <input id="auth-password-confirmation" name="password_confirmation" type="password"
+                                autocomplete="new-password" minlength="8">
+                            <button class="password-toggle" type="button" data-password-toggle="auth-password-confirmation"
+                                aria-label="Mostrar confirmação de senha" aria-pressed="false"><i class="ri-eye-line" aria-hidden="true"></i></button>
+                        </span>
+                    </label>
+
+                    <p class="auth-error" id="auth-error" role="alert" hidden></p>
+                    <button class="auth-submit" id="auth-submit" type="submit">Entrar</button>
+                    <button class="auth-toggle auth-forgot" id="auth-forgot" type="button">Esqueci minha senha</button>
+                    <button class="auth-toggle" id="auth-toggle" type="button">Criar uma conta</button>
+                </form>
+            </section>
+        </div>
+
+        <div class="interests-modal" id="interests-modal" aria-hidden="true">
+            <section class="interests-content" role="dialog" aria-modal="true" aria-labelledby="interests-title">
+                <h2 id="interests-title">Escolha seus interesses</h2>
+                <p>Selecione os assuntos que você gosta para personalizarmos suas sugestões.</p>
+                <div class="interest-options" id="interest-options"></div>
+                <p class="auth-error" id="interests-error" role="alert" hidden></p>
+                <div class="interests-actions">
+                    <button class="auth-toggle" id="skip-interests" type="button">Pular por enquanto</button>
+                    <button class="auth-submit" id="save-interests" type="button">Continuar</button>
+                </div>
+            </section>
+        </div>
+
+        <div class="notifications-modal" id="notifications-modal" aria-hidden="true">
+            <section class="notifications-content" role="dialog" aria-modal="true"
+                aria-labelledby="notifications-title">
+                <div class="profile-header">
+                    <h2 id="notifications-title">Caixa</h2>
+                    <button class="close-notifications" type="button" aria-label="Fechar caixa"><i
+                            class="ri-close-line"></i></button>
+                </div>
+                <div class="notification-tabs">
+                    <button class="notification-tab active" id="notifications-tab-all" type="button">Todas</button>
+                    <button class="notification-tab" id="notifications-tab-mentions" type="button">Menções</button>
+                    <button class="notification-tab" id="notifications-tab-history" type="button">Histórico</button>
+                    <button class="notification-tab" id="notifications-tab-moderation" type="button" hidden>Moderação</button>
+                </div>
+                <div class="notifications-list" id="notifications-list">
+                    <p class="notifications-empty">Suas notificações aparecerão aqui.</p>
+                </div>
+            </section>
+        </div>
+
+        <div class="profile-modal" id="profile-modal" aria-hidden="true">
+            <section class="profile-content" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+                <button class="profile-back" id="profile-back" type="button" aria-label="Voltar">&lt;</button>
+                <div class="profile-cover"><img id="profile-cover" src="" alt="Capa do perfil"><button
+                        class="profile-cover-upload" id="profile-cover-upload" type="button">Alterar capa</button></div>
+                <div class="profile-header">
+                    <h2 id="profile-title">Meu perfil</h2>
+                    <button class="close-profile" type="button" aria-label="Fechar perfil"><i
+                            class="ri-close-line"></i></button>
+                </div>
+                <div class="profile-summary">
+                    <img id="profile-avatar" src="img/vibe-mark.png" alt="Avatar do perfil">
+                    <button class="profile-avatar-upload" id="profile-avatar-upload" type="button"
+                        aria-label="Alterar avatar"><i class="ri-camera-line"></i></button>
+                    <div>
+                        <h3 id="profile-name">Vibe</h3>
+                        <p id="profile-username">@vibe</p>
+                    </div>
+                </div>
+                <div class="profile-stats">
+                    <span><strong id="profile-video-count">0</strong> vídeos</span>
+                    <span><strong id="profile-view-count">0</strong> visualizações</span>
+                    <button class="profile-stat" id="profile-followers"><strong id="profile-follower-count">0</strong>
+                        seguidores</button>
+                    <button class="profile-stat" id="profile-following"><strong id="profile-following-count">0</strong>
+                        seguindo</button>
+                </div>
+                <p class="profile-bio" id="profile-bio">Adicione uma descrição ao seu perfil.</p>
+                <div class="profile-actions">
+                    <button class="auth-submit" id="profile-edit" type="button">Editar perfil</button>
+                    <button class="auth-submit" id="profile-follow" type="button" hidden>Seguir</button>
+                    <button class="auth-toggle" id="profile-share" type="button">Compartilhar</button>
+                    <button class="auth-toggle" id="profile-playlists" type="button">Playlists</button>
+                    <button class="auth-toggle" id="profile-hidden-users" type="button">Usuários ocultados</button>
+                    <button class="auth-toggle" id="profile-logout" type="button">Sair da conta</button>
+                </div>
+                <section class="profile-analytics" id="profile-analytics" aria-labelledby="profile-analytics-title">
+                    <h3 id="profile-analytics-title">Estatísticas</h3>
+                    <div class="profile-analytics-grid">
+                        <span><strong id="profile-stat-likes">0</strong> curtidas</span>
+                        <span><strong id="profile-stat-comments">0</strong> comentários</span>
+                        <span><strong id="profile-stat-shares">0</strong> compartilhamentos</span>
+                        <span><strong id="profile-stat-average-views">0</strong> média de visualizações</span>
+                    </div>
+                </section>
+                <form class="profile-form" id="profile-form" hidden>
+                    <label>Nome<input id="profile-edit-name" name="name" maxlength="100"></label>
+                    <label>Usuário<input id="profile-edit-username" name="username" maxlength="30"></label>
+                    <label>Biografia<textarea id="profile-edit-bio" name="bio" maxlength="500"></textarea></label>
+                    <label>URL do avatar<input id="profile-edit-avatar" name="avatar_url" type="url"
+                            placeholder="https://..."></label>
+                    <label>URL da capa<input id="profile-edit-cover" name="cover_url" type="url"
+                            placeholder="https://..."></label>
+                    <label class="profile-check"><input id="profile-edit-private" name="is_private" type="checkbox">
+                        Perfil privado</label>
+                    <label class="profile-check"><input id="profile-edit-show-liked" name="show_liked_videos"
+                            type="checkbox"> Exibir vídeos curtidos</label>
+                    <label class="profile-check"><input id="profile-edit-following" name="allow_following"
+                            type="checkbox" checked> Permitir novos seguidores</label>
+                    <label class="profile-check"><input id="profile-edit-comments" name="allow_comments" type="checkbox"
+                            checked> Permitir comentários</label>
+                    <p class="auth-error" id="profile-error" role="alert" hidden></p>
+                    <button class="auth-submit" type="submit">Salvar alterações</button>
+                </form>
+                <input id="profile-image-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+                <div class="profile-tabs" role="tablist" aria-label="Conteúdo do perfil">
+                    <button class="profile-tab active" type="button" data-profile-tab="videos" role="tab"
+                        aria-selected="true">Vídeos</button>
+                    <button class="profile-tab" type="button" data-profile-tab="liked" role="tab"
+                        aria-selected="false">Curtidos</button>
+                    <button class="profile-tab" type="button" data-profile-tab="favorites" role="tab"
+                        aria-selected="false">Favoritos</button>
+                </div>
+                <h3 class="profile-videos-title">Meus vídeos</h3>
+                <div class="profile-videos" id="profile-videos"></div>
+            </section>
+        </div>
+
+        <div class="profile-video-viewer" id="profile-video-viewer" aria-hidden="true">
+            <div class="profile-video-viewer-frame">
+                <button class="profile-video-viewer-close" id="profile-video-viewer-close" type="button"
+                    aria-label="Fechar vídeo"><i class="ri-close-line"></i></button>
+                <video id="profile-video-viewer-media" controls playsinline></video>
+            </div>
+        </div>
+
+        <div class="simple-modal" id="people-modal" aria-hidden="true">
+            <section class="simple-modal-content" role="dialog" aria-modal="true" aria-labelledby="people-title">
+                <div class="profile-header">
+                    <h2 id="people-title">Pessoas</h2><button class="close-people" type="button" aria-label="Fechar"><i
+                            class="ri-close-line"></i></button>
+                </div>
+                <div id="people-list" class="people-list"></div>
+            </section>
+        </div>
+
+        <div class="simple-modal" id="playlists-modal" aria-hidden="true">
+            <section class="simple-modal-content" role="dialog" aria-modal="true" aria-labelledby="playlists-title">
+                <div class="profile-header">
+                    <h2 id="playlists-title">Minhas playlists</h2><button class="close-playlists" type="button"
+                        aria-label="Fechar"><i class="ri-close-line"></i></button>
+                </div>
+                <form class="playlist-form" id="playlist-form"><input name="name" placeholder="Nome da playlist"
+                        maxlength="100" required><button type="submit">Criar</button></form>
+                <div id="playlists-list" class="playlists-list"></div>
+            </section>
+        </div>
+
+        <div class="profile-image-viewer" id="profile-image-viewer" aria-hidden="true">
+            <section class="profile-image-viewer-content" role="dialog" aria-modal="true"
+                aria-labelledby="profile-image-viewer-title">
+                <div class="profile-image-viewer-header">
+                    <h2 id="profile-image-viewer-title">Imagem do perfil</h2>
+                    <button id="profile-image-viewer-close" type="button" aria-label="Fechar imagem"><i
+                            class="ri-close-line"></i></button>
+                </div>
+                <img id="profile-image-viewer-media" src="" alt="Imagem ampliada do perfil">
+                <button class="auth-submit" id="profile-image-viewer-change" type="button">Alterar imagem</button>
+            </section>
+        </div>
+
+        <div class="crop-modal" id="crop-modal" aria-hidden="true">
+            <section class="crop-content" role="dialog" aria-modal="true" aria-labelledby="crop-title">
+                <div class="profile-header">
+                    <h2 id="crop-title">Ajustar capa</h2><button class="close-crop" type="button"
+                        aria-label="Cancelar"><i class="ri-close-line"></i></button>
+                </div>
+                <p class="crop-help">Arraste a foto para escolher a área da capa.</p>
+                <div class="crop-preview"><img id="crop-image" alt="Prévia da capa" draggable="false">
+                    <div class="crop-frame" aria-hidden="true"><span></span><span></span><span></span><span></span>
+                    </div>
+                </div>
+                <label>Zoom<input id="crop-zoom" type="range" min="100" max="220" value="100"></label>
+                <input id="crop-x" type="hidden" value="50">
+                <input id="crop-y" type="hidden" value="50">
+                <div class="crop-actions"><button class="auth-toggle close-crop" type="button">Cancelar</button><button
+                        class="auth-submit" id="confirm-crop" type="button">Usar esta capa</button></div>
+            </section>
+        </div>
+
+        <!--footer/rodape-->
+        <footer class="app-footer">
+            <div class="footer-item" id="btnInicio">
+                <i class="ri-home-9-fill"></i>
+                <span>inicio</span>
+            </div>
+
+            <button class="footer-item" id="btnDiscover" type="button" aria-label="Descobrir vídeos">
+                <i class="ri-compass-3-fill"></i>
+                <span>Descobrir</span>
+            </button>
+
+            <button class="footer-item plus" id="btnUpload" type="button" aria-label="Publicar vídeo">
+                <i class="ri-add-line"></i>
+                <span>Adicionar</span>
+            </button>
+
+            <button class="footer-item" id="btnInbox" type="button" aria-label="Abrir caixa de notificações">
+                <i class="ri-inbox-2-line"></i>
+                <span>Caixa</span>
+                <b class="notification-badge" id="notification-badge" hidden>0</b>
+            </button>
+
+            <button class="footer-item" id="btnProfile" type="button" aria-label="Abrir conta">
+                <i class="ri-user-fill"></i>
+                <span>Entrar</span>
+            </button>
+        </footer>
+        <input id="video-file-input" type="file" accept="video/mp4,video/webm,video/quicktime" hidden>
+    </div>
+
+    <script src="demo-data.js"></script>
+    <script src="comments-drag.js"></script>
+    <script src="api-client.js"></script>
+    <script src="feed-client.js"></script>
+    <script src="video-ui.js"></script>
+    <script src="ui-helpers.js"></script>
+    <script src="auth-form.js"></script>
+    <script src="script.js?v=20260923"></script>
+</body>
+
+</html>

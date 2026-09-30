@@ -1,0 +1,19 @@
+# Credenciais
+.env
+.env.*
+!.env.example
+
+# Dependências futuras
+node_modules/
+vendor/
+/tmp/
+
+# Logs
+*.log
+
+# Vídeos locais — depois serão hospedados no Cloudinary
+/videos/
+*.sql
+/backend/storage/logs/*.log
+/conversa com gpt.pdf
+/ideias de melhoria.docx

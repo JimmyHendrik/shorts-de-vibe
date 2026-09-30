@@ -1,0 +1,7 @@
+{
+    "php.validate.executablePath": "C:\\wamp64\\bin\\php\\php8.5.0\\php.exe",
+    "liveServer.settings.ignoreFiles": [
+        "**/backend/**",
+        "**/.git/**"
+    ]
+}
