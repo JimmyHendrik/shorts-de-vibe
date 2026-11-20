@@ -27,6 +27,34 @@ php artisan key:generate
 php artisan migrate
 ```
 
+### Certificado TLS do PHP no Windows
+
+Se o login com Google voltar com o erro `cURL error 60: SSL certificate problem`, configure um bundle de certificados confiável para as chamadas OAuth do backend. No terminal da raiz do projeto:
+
+```powershell
+New-Item -ItemType Directory -Force backend\storage\app\certs
+curl.exe --fail --location https://curl.se/ca/cacert.pem --output backend\storage\app\certs\cacert.pem
+```
+
+No `backend/.env`, defina:
+
+```dotenv
+GOOGLE_CA_BUNDLE=storage/app/certs/cacert.pem
+```
+
+Reinicie `php artisan serve` para carregar a configuração. A verificação TLS permanece habilitada; não a desative.
+
+### Limite de tamanho para upload de vídeos no PHP
+
+O projeto aceita vídeos de até 50 MB. Se a publicação retornar `413` ou `The POST data is too large`, os limites do PHP estão menores que o arquivo. Confira o `php.ini` ativo com `php --ini` e ajuste:
+
+```ini
+upload_max_filesize = 50M
+post_max_size = 64M
+```
+
+`post_max_size` deve ser maior que `upload_max_filesize` para incluir os campos multipart e a capa. Reinicie `php artisan serve` após alterar o `php.ini`.
+
 ## Iniciar o projeto
 
 Em um terminal, inicie a API:

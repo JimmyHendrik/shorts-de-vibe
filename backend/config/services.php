@@ -41,6 +41,17 @@ return [
         'api_secret' => env('CLOUDINARY_API_SECRET'),
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/auth/google/callback'),
+        'guzzle' => [
+            'verify' => env('GOOGLE_CA_BUNDLE')
+                ? base_path(env('GOOGLE_CA_BUNDLE'))
+                : true,
+        ],
+    ],
+
     'vibe' => [
         'frontend_url' => env('VIBE_FRONTEND_URL', 'http://localhost:5500'),
         'moderator_emails' => array_values(array_filter(array_map(

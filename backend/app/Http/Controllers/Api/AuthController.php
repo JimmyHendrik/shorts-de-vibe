@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
@@ -188,5 +189,68 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()?->delete();
 
         return response()->json(status: 204);
+    }
+
+    public function redirectToGoogle()
+    {
+        return Socialite::driver('google')->stateless()->redirect();
+    }
+
+    public function handleGoogleCallback()
+    {
+        try {
+            $googleUser = Socialite::driver('google')->stateless()->user();
+        } catch (\Throwable $e) {
+            report($e);
+            $frontend = rtrim((string) config('services.vibe.frontend_url', 'http://localhost:5500'), '/');
+            return redirect()->away($frontend . '/?auth_error=' . urlencode('Falha ao autenticar com o Google.'));
+        }
+
+        $user = User::where('google_id', $googleUser->getId())
+            ->orWhere('email', $googleUser->getEmail())
+            ->first();
+
+        if (! $user) {
+            $baseUsername = Str::slug(explode('@', $googleUser->getEmail())[0], '_');
+            if (empty($baseUsername) || strlen($baseUsername) < 3) {
+                $baseUsername = 'user';
+            }
+            $baseUsername = substr($baseUsername, 0, 20);
+            $username = $baseUsername;
+            $counter = 1;
+            while (User::where('username', $username)->exists()) {
+                $username = $baseUsername . '_' . rand(100, 9999);
+                if ($counter++ > 10) {
+                    $username = 'vibe_' . Str::random(8);
+                    break;
+                }
+            }
+
+            $user = User::create([
+                'name' => $googleUser->getName() ?: ($googleUser->getNickname() ?: 'Usuário Vibe'),
+                'username' => $username,
+                'email' => $googleUser->getEmail(),
+                'google_id' => $googleUser->getId(),
+                'avatar_url' => $googleUser->getAvatar(),
+                'password' => Hash::make(Str::random(32)),
+            ]);
+        } else {
+            if (! $user->google_id) {
+                $user->update(['google_id' => $googleUser->getId()]);
+            }
+            if (! $user->avatar_url && $googleUser->getAvatar()) {
+                $user->update(['avatar_url' => $googleUser->getAvatar()]);
+            }
+        }
+
+        if (! $user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+        }
+
+        $user->tokens()->delete();
+        $token = $user->createToken('vibe-web')->plainTextToken;
+
+        $frontend = rtrim((string) config('services.vibe.frontend_url', 'http://localhost:5500'), '/');
+        return redirect()->away($frontend . '/?google_token=' . $token);
     }
 }

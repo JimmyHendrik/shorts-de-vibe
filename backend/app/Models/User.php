@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Relations\HasMany as EloquentHasMany;
 
-#[Fillable(['name', 'username', 'email', 'password', 'bio', 'avatar_url', 'cover_url', 'is_private', 'show_liked_videos', 'allow_following', 'allow_comments', 'interests', 'onboarding_completed'])]
+#[Fillable(['name', 'username', 'email', 'google_id', 'password', 'bio', 'avatar_url', 'cover_url', 'is_private', 'show_liked_videos', 'allow_following', 'allow_comments', 'interests', 'onboarding_completed'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail
 {

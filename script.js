@@ -20,13 +20,10 @@ const INTEREST_GROUPS = {
 let commentsData = [];
 let commentReplyTarget = null;
 let commentsRequestId = 0;
-// Em um aparelho na rede local, `127.0.0.1` aponta para o próprio aparelho.
-// Mantemos o loopback no computador e usamos o mesmo host da página no celular.
+// Mantém o host da página para que a API use o mesmo endereço de loopback ou da rede.
 const DEFAULT_API_BASE_URL = window.location.protocol === 'https:'
     ? new URL('/api', window.location.origin).toString()
-    : ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
-        ? 'http://127.0.0.1:8000/api'
-        : `http://${window.location.hostname}:8000/api`;
+    : `http://${window.location.hostname === '::1' ? '[::1]' : window.location.hostname}:8000/api`;
 const FEED_PAGE_SIZE = 8;
 const API_BASE_URL = (document.body.dataset.apiBaseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
 const useDemoFallback = document.body.dataset.demoFallback === 'true';
@@ -366,6 +363,7 @@ const authError = document.getElementById('auth-error');
 const authSubmit = document.getElementById('auth-submit');
 const authForgot = document.getElementById('auth-forgot');
 const authToggle = document.getElementById('auth-toggle');
+const authGoogleBtn = document.getElementById('auth-google-btn');
 const closeAuth = document.querySelector('.close-auth');
 const authAccount = document.getElementById('auth-account');
 const authUserName = document.getElementById('auth-user-name');
@@ -1240,6 +1238,11 @@ authModal.addEventListener('click', event => {
     if (event.target === authModal) fecharAutenticacao();
 });
 authToggle.addEventListener('click', alternarModoAutenticacao);
+if (authGoogleBtn) {
+    authGoogleBtn.addEventListener('click', () => {
+        window.location.href = apiUrl('/auth/google/redirect');
+    });
+}
 authForgot.addEventListener('click', () => void solicitarRedefinicaoSenha());
 authForm.addEventListener('submit', event => {
     event.preventDefault();
@@ -2784,6 +2787,24 @@ function limparSessao() {
 }
 
 async function restaurarSessao() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('google_token')) {
+        authToken = urlParams.get('google_token');
+        sessionStorage.setItem('vibe_auth_token', authToken);
+        urlParams.delete('google_token');
+        const newSearch = urlParams.toString();
+        const cleanUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+    }
+    if (urlParams.has('auth_error')) {
+        const errorMsg = urlParams.get('auth_error');
+        urlParams.delete('auth_error');
+        const newSearch = urlParams.toString();
+        const cleanUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+        setFeedStatus(errorMsg, { visible: true });
+    }
+
     if (!authToken) {
         atualizarInterfaceAutenticacao();
         welcomeGate.hidden = false;
@@ -3269,7 +3290,7 @@ async function cortarVideoSeNecessario(file) {
     const start = Math.max(0, Number(publishTrimStart.value) || 0);
     const end = Number(publishTrimEnd.value) || 0;
     const duration = publishDetailPreview.duration || 0;
-    if (!duration || start <= 0 && (!end || end >= duration) || end <= start) return file;
+    if (!duration || selecaoCorrespondeAoVideoInteiro(start, end, duration) || end <= start) return file;
     if (!HTMLVideoElement.prototype.captureStream || typeof MediaRecorder === 'undefined') return file;
 
     const sourceUrl = URL.createObjectURL(file);
@@ -3320,13 +3341,21 @@ function enviarArquivoComProgresso(formData) {
     return new Promise((resolve, reject) => {
         const request = new XMLHttpRequest();
         request.open('POST', apiUrl('/videos/upload'));
+        request.timeout = 10 * 60 * 1000;
         request.setRequestHeader('Accept', 'application/json');
         if (authToken) request.setRequestHeader('Authorization', `Bearer ${authToken}`);
         request.upload.addEventListener('progress', event => {
-            if (event.lengthComputable) atualizarProgressoPublicacao((event.loaded / event.total) * 100);
+            if (!event.lengthComputable) return;
+            const uploaded = event.loaded >= event.total;
+            atualizarProgressoPublicacao(
+                (event.loaded / event.total) * 100,
+                true,
+                uploaded ? 'Processando vídeo no servidor…' : 'Enviando vídeo…',
+            );
         });
         request.addEventListener('error', () => reject(new Error('Não foi possível enviar o vídeo.')));
         request.addEventListener('abort', () => reject(new Error('Envio cancelado.')));
+        request.addEventListener('timeout', () => reject(new Error('O envio demorou mais que o esperado. Verifique a conexão e tente novamente.')));
         request.addEventListener('load', () => {
             let payload = null;
             try { payload = JSON.parse(request.responseText || 'null'); } catch { /* resposta inválida tratada abaixo */ }
@@ -3340,6 +3369,11 @@ function enviarArquivoComProgresso(formData) {
         });
         request.send(formData);
     });
+}
+
+function selecaoCorrespondeAoVideoInteiro(start, end, duration) {
+    const roundingTolerance = 0.1;
+    return start <= roundingTolerance && (!end || end >= duration - roundingTolerance);
 }
 
 // --- 8. Compartilhar ---
@@ -3360,6 +3394,7 @@ async function publicarVideo(file, metadata = {}) {
     publishBack.disabled = true;
     atualizarProgressoPublicacao(0, true, 'Enviando vídeo…');
     let uploadedAssets = null;
+    let videoPublished = false;
 
     try {
         const uploadPayload = await enviarArquivoComProgresso(formData);
@@ -3387,12 +3422,14 @@ async function publicarVideo(file, metadata = {}) {
                 high_quality: metadata.high_quality !== false,
             },
         });
+        videoPublished = true;
         await loadInitialFeed();
         localStorage.removeItem(PUBLISH_DRAFT_KEY);
         fecharPublicacao();
         setFeedStatus('Vídeo publicado com sucesso.');
     } catch (error) {
-        if (uploadedAssets) {
+        atualizarProgressoPublicacao(0, false);
+        if (uploadedAssets && !videoPublished) {
             try {
                 await apiRequest('/videos/upload', {
                     method: 'DELETE',
@@ -3407,9 +3444,11 @@ async function publicarVideo(file, metadata = {}) {
             solicitarAutenticacao('Sua sessão expirou. Entre novamente para publicar.');
         } else {
             console.error(error);
+            publishStatus.textContent = error.message || 'Não foi possível publicar o vídeo.';
             setFeedStatus(error.message || 'Não foi possível publicar o vídeo.', { visible: true });
         }
     } finally {
+        atualizarProgressoPublicacao(0, false);
         btnUpload.disabled = false;
         publishSubmit.disabled = false;
         publishBack.disabled = false;
