@@ -14,11 +14,13 @@ class VideoUploadController extends Controller
 {
     public function store(Request $request, CloudinaryVideoUploader $uploader, CloudinaryImageUploader $imageUploader): JsonResponse
     {
+        @set_time_limit(300);
+
         $validated = $request->validate([
             'video' => [
                 'required',
                 'file',
-                'mimetypes:video/mp4,video/webm,video/quicktime',
+                'mimetypes:video/mp4,video/webm,video/quicktime,video/x-matroska,video/ogg',
                 'max:51200',
             ],
             'thumbnail' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
@@ -54,8 +56,12 @@ class VideoUploadController extends Controller
             }
             report($exception);
 
+            $message = config('app.debug')
+                ? $exception->getMessage()
+                : 'Não foi possível enviar o vídeo agora. Tente novamente em instantes.';
+
             return response()->json([
-                'message' => 'Não foi possível enviar o vídeo agora. Tente novamente em instantes.',
+                'message' => $message,
             ], 503);
         }
 

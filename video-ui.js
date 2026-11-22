@@ -7,22 +7,39 @@
         const getProgressThumb = video => video.parentElement.querySelector('.progress-thumb');
         const getProgressTime = video => video.parentElement.querySelector('.progress-time');
 
+        function getProgressRange(video) {
+            if (Number.isFinite(video.duration) && video.duration > 0) {
+                return { start: 0, end: video.duration };
+            }
+
+            const seekable = video.seekable;
+            if (!seekable?.length) return null;
+            const start = seekable.start(0);
+            const end = seekable.end(seekable.length - 1);
+            return Number.isFinite(start) && Number.isFinite(end) && end > start
+                ? { start, end }
+                : null;
+        }
+
         function setPlayIconState(video, isPlaying) {
             const playIcon = getPlayIcon(video);
             if (playIcon) playIcon.classList.toggle('active', !isPlaying);
         }
 
-        function atualizarBarraProgresso(video) {
+        function atualizarBarraProgresso(video, currentTime = video.currentTime) {
             const progress = getProgressFill(video);
-            if (!progress || !isFinite(video.duration) || video.duration === 0) return;
+            const range = getProgressRange(video);
+            if (!progress || !range || !Number.isFinite(currentTime)) return;
 
-            const percentage = Math.max(0, Math.min(100, (video.currentTime / video.duration) * 100));
+            const duration = range.end - range.start;
+            const elapsed = Math.max(0, Math.min(duration, currentTime - range.start));
+            const percentage = (elapsed / duration) * 100;
             progress.style.width = `${percentage}%`;
             const thumb = getProgressThumb(video);
             if (thumb) thumb.style.left = `${percentage}%`;
             const time = getProgressTime(video);
             if (time) {
-                const nextLabel = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+                const nextLabel = `${formatTime(elapsed)} / ${formatTime(duration)}`;
                 // Evita reescrever o texto em todos os frames quando o segundo
                 // exibido ainda não mudou.
                 if (time.textContent !== nextLabel) time.textContent = nextLabel;
@@ -54,6 +71,6 @@
             video.addEventListener('ended', () => stopProgressAnimation(video));
         }
 
-        return { getPlayIcon, getProgressBar, getProgressFill, getProgressThumb, getProgressTime, setPlayIconState, atualizarBarraProgresso, bindProgressAnimation };
+        return { getPlayIcon, getProgressBar, getProgressFill, getProgressThumb, getProgressTime, getProgressRange, setPlayIconState, atualizarBarraProgresso, bindProgressAnimation };
     };
 })();

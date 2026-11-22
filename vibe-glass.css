@@ -1,0 +1,204 @@
+/* ==========================================================================
+   vibe-glass.css
+   Estilo "liquid glass" do vibe. Carregue por ÚLTIMO:
+
+   <link rel="stylesheet" href="style.css">
+   <link rel="stylesheet" href="vibe-design.css">
+   <link rel="stylesheet" href="vibe-glass.css">
+
+   Para desligar o efeito, basta remover a linha acima do HTML.
+   Mantém azul e branco e funciona nos temas claro e escuro.
+   ========================================================================== */
+
+/* ---------- 1. Tokens do vidro ---------- */
+:root {
+    --glass-blur: blur(18px) saturate(180%);
+    --glass-blur-strong: blur(28px) saturate(170%);
+
+    --glass-bg: rgba(255, 255, 255, .10);          /* botões flutuantes sobre o vídeo */
+    --glass-bg-hover: rgba(255, 255, 255, .18);
+    --glass-bg-strong: rgba(24, 26, 40, .62);      /* painéis e janelas */
+    --glass-tint: rgba(255, 255, 255, .08);        /* campos dentro do vidro */
+    --glass-border: rgba(255, 255, 255, .22);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, .28);
+    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, .35), inset 0 -1px 0 rgba(255, 255, 255, .08);
+    --glass-overlay: rgba(6, 8, 18, .45);          /* fundo escurecido atrás das janelas */
+}
+
+@media (prefers-color-scheme: light) {
+    :root {
+        --glass-bg: rgba(255, 255, 255, .55);
+        --glass-bg-hover: rgba(255, 255, 255, .85);
+        --glass-bg-strong: rgba(255, 255, 255, .72);
+        --glass-tint: rgba(27, 28, 38, .06);
+        --glass-border: rgba(255, 255, 255, .75);
+        --glass-shadow: 0 8px 32px rgba(30, 35, 55, .16);
+        --glass-overlay: rgba(20, 28, 48, .28);
+    }
+}
+
+/* ---------- 2. Fundo com manchas de azul ----------
+   O vidro só aparece se houver algo colorido atrás dele. */
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        radial-gradient(60vmax 50vmax at 85% 8%, rgba(37, 139, 255, .22), transparent 60%),
+        radial-gradient(50vmax 45vmax at 8% 92%, rgba(91, 92, 255, .18), transparent 60%);
+}
+@media (prefers-color-scheme: light) {
+    body::before {
+        background:
+            radial-gradient(60vmax 50vmax at 85% 8%, rgba(37, 139, 255, .16), transparent 60%),
+            radial-gradient(50vmax 45vmax at 8% 92%, rgba(91, 92, 255, .12), transparent 60%);
+    }
+}
+
+/* ---------- 3. Botões flutuantes sobre o vídeo ---------- */
+button.sidebar-icon {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow), var(--glass-highlight);
+}
+button.sidebar-icon:hover { background: var(--glass-bg-hover); }
+
+.videos-container .audio-unlock {
+    background: rgba(255, 255, 255, .18);
+    color: #fff;
+    border: 1px solid var(--glass-border);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-highlight);
+}
+/* Com o controle de volume aberto, o fundo dele é claro no tema claro */
+.audio-control:hover .audio-unlock,
+.audio-control.expanded .audio-unlock,
+.audio-control:focus-within .audio-unlock { color: var(--color-white); }
+
+/* ---------- 4. Barras do celular ---------- */
+@media (max-width: 899px) {
+    .app-header,
+    .app-footer {
+        background: var(--glass-bg-strong);
+        -webkit-backdrop-filter: var(--glass-blur);
+        backdrop-filter: var(--glass-blur);
+        border-color: var(--glass-border);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18);
+    }
+
+    /* Painel de comentários (sobe de baixo, por cima do vídeo) */
+    .comments-content {
+        background: var(--glass-bg-strong);
+        -webkit-backdrop-filter: var(--glass-blur-strong);
+        backdrop-filter: var(--glass-blur-strong);
+        border-color: var(--glass-border);
+        box-shadow: var(--glass-shadow), var(--glass-highlight);
+    }
+    .comment-input input,
+    .comments-notice,
+    .close-comments { background: var(--glass-tint); }
+}
+
+/* ---------- 5. Janelas (modais) ---------- */
+.auth-modal,
+.simple-modal,
+.interests-modal,
+.crop-modal,
+.video-options-modal,
+.profile-image-viewer { background: var(--glass-overlay); }
+
+.notifications-content,
+.simple-modal-content,
+.auth-content,
+.crop-content,
+.interests-content,
+.publish-content,
+.video-options-content,
+.profile-image-viewer-content,
+.welcome-card {
+    background: var(--glass-bg-strong);
+    -webkit-backdrop-filter: var(--glass-blur-strong);
+    backdrop-filter: var(--glass-blur-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow), var(--glass-highlight);
+}
+.video-options-content button { background: var(--glass-tint); }
+
+.comment-menu-items,
+.feed-notice {
+    background: var(--glass-bg-strong);
+    -webkit-backdrop-filter: var(--glass-blur-strong);
+    backdrop-filter: var(--glass-blur-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow), var(--glass-highlight);
+}
+
+/* ---------- 6. Pesquisa: barra flutuante sobre os resultados ---------- */
+.app-container.search-page-active .search-toolbar {
+    top: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--glass-border);
+    border-radius: 22px;
+    background: var(--glass-bg-strong);
+    -webkit-backdrop-filter: var(--glass-blur-strong);
+    backdrop-filter: var(--glass-blur-strong);
+    box-shadow: var(--glass-shadow), var(--glass-highlight);
+}
+.search-page { padding-top: 92px; }
+.search-toolbar input,
+.search-toolbar select,
+.search-close { background: var(--glass-tint); }
+
+/* ---------- 7. Perfil: botões sobre a capa e sobre os vídeos ---------- */
+.profile-cover-upload {
+    border: 1px solid rgba(255, 255, 255, .3);
+    background: rgba(255, 255, 255, .16);
+    color: #fff;
+    box-shadow: var(--glass-highlight), 0 4px 16px rgba(0, 0, 0, .25);
+}
+.profile-cover-upload:hover { background: rgba(255, 255, 255, .26); }
+.profile-video-actions button {
+    border: 1px solid rgba(255, 255, 255, .22);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3);
+}
+
+/* ---------- 8. Alternativas para quando o vidro não é possível ---------- */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    :root {
+        --glass-bg: rgba(32, 34, 50, .92);
+        --glass-bg-hover: rgba(43, 45, 64, .96);
+        --glass-bg-strong: rgba(24, 26, 40, .96);
+        --glass-overlay: rgba(6, 8, 18, .72);
+    }
+    @media (prefers-color-scheme: light) {
+        :root {
+            --glass-bg: rgba(255, 255, 255, .94);
+            --glass-bg-hover: #ffffff;
+            --glass-bg-strong: rgba(255, 255, 255, .97);
+            --glass-overlay: rgba(20, 28, 48, .5);
+        }
+    }
+}
+
+/* Para quem pede menos transparência no sistema (onde o navegador suporta) */
+@media (prefers-reduced-transparency: reduce) {
+    :root {
+        --glass-bg: rgba(32, 34, 50, .95);
+        --glass-bg-hover: rgba(43, 45, 64, .98);
+        --glass-bg-strong: rgba(24, 26, 40, .98);
+        --glass-overlay: rgba(6, 8, 18, .75);
+    }
+    @media (prefers-color-scheme: light) {
+        :root {
+            --glass-bg: rgba(255, 255, 255, .96);
+            --glass-bg-hover: #ffffff;
+            --glass-bg-strong: rgba(255, 255, 255, .98);
+            --glass-overlay: rgba(20, 28, 48, .5);
+        }
+    }
+}

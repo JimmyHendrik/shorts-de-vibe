@@ -54,6 +54,7 @@ const {
     getPlayIcon,
     getProgressBar,
     getProgressFill,
+    getProgressRange,
     bindProgressAnimation,
     getProgressTime,
     setPlayIconState,
@@ -209,9 +210,12 @@ function renderVideos(videosToRender, append = false) {
 function renderComments() {
     commentsList.replaceChildren();
 
-    commentsData.forEach(comment => {
+    [...commentsData]
+        .sort((first, second) => Number(Boolean(second.isPinned)) - Number(Boolean(first.isPinned)))
+        .forEach(comment => {
         const commentItem = document.createElement('article');
         commentItem.className = 'comment-item';
+        commentItem.classList.toggle('is-pinned', Boolean(comment.isPinned));
 
         const avatar = document.createElement('img');
         avatar.src = safeMediaUrl(comment.avatar) || 'img/vibe-mark.png';
@@ -221,12 +225,39 @@ function renderComments() {
         content.className = 'comment-content';
         const user = document.createElement('h4');
         user.textContent = comment.user;
+        const meta = document.createElement('div');
+        meta.className = 'comment-meta';
+        meta.appendChild(user);
+        const commentTime = formatCommentTime(comment.createdAt);
+        if (commentTime) {
+            const time = document.createElement('time');
+            time.className = 'comment-time';
+            time.dateTime = comment.createdAt;
+            time.textContent = commentTime;
+            meta.appendChild(time);
+        }
+        if (comment.isPinned) {
+            const pinnedLabel = document.createElement('span');
+            pinnedLabel.className = 'comment-pinned-label';
+            pinnedLabel.textContent = 'Fixado';
+            meta.appendChild(pinnedLabel);
+        }
         const text = document.createElement('p');
         text.textContent = comment.text;
-        content.append(user, text);
+        content.append(meta, text);
 
         const actions = document.createElement('div');
         actions.className = 'comment-actions';
+        const reaction = document.createElement('div');
+        reaction.className = 'comment-reaction';
+        reaction.setAttribute('aria-label', `${comment.likesCount || 0} curtidas`);
+        const reactionIcon = document.createElement('i');
+        reactionIcon.className = 'ri-heart-line';
+        reactionIcon.setAttribute('aria-hidden', 'true');
+        const reactionCount = document.createElement('span');
+        reactionCount.textContent = String(comment.likesCount || 0);
+        reaction.append(reactionIcon, reactionCount);
+
         const replies = document.createElement('div');
         replies.className = 'comment-replies';
         replies.hidden = true;
@@ -246,29 +277,133 @@ function renderComments() {
             commentInput.focus();
         });
         actions.appendChild(reply);
+
         const isCommentAuthor = comentarioPertenceAoUsuario(comment);
         const isVideoOwner = usuarioEhDonoDoVideo();
+        const menu = document.createElement('div');
+        menu.className = 'comment-menu';
+        const menuTrigger = document.createElement('button');
+        menuTrigger.type = 'button';
+        menuTrigger.className = 'comment-menu-trigger';
+        menuTrigger.setAttribute('aria-label', 'Mais ações do comentário');
+        menuTrigger.setAttribute('aria-haspopup', 'menu');
+        menuTrigger.setAttribute('aria-expanded', 'false');
+        menuTrigger.append(createIcon('ri-more-2-fill'), document.createTextNode(' Mais'));
+        const menuItems = document.createElement('div');
+        menuItems.className = 'comment-menu-items';
+        menuItems.setAttribute('role', 'menu');
+        menuItems.hidden = true;
+        const addMenuItem = (label, action, dangerous = false) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = dangerous ? 'comment-menu-item is-danger' : 'comment-menu-item';
+            item.setAttribute('role', 'menuitem');
+            item.textContent = label;
+            item.addEventListener('click', () => {
+                fecharMenusComentario();
+                void action();
+            });
+            menuItems.appendChild(item);
+        };
+        addMenuItem('Copiar texto', () => copiarTextoComentario(comment));
+        if (isVideoOwner && !comment.parentId) {
+            addMenuItem(
+                comment.isPinned ? 'Desafixar comentário' : 'Fixar comentário',
+                () => alternarComentarioFixado(comment),
+            );
+        }
         if (isCommentAuthor) {
-            const edit = document.createElement('button');
-            edit.type = 'button';
-            edit.textContent = 'Editar';
-            edit.addEventListener('click', () => void editarComentario(comment));
-            actions.appendChild(edit);
-
+            addMenuItem('Editar', () => editarComentario(comment));
         }
         if (isCommentAuthor || isVideoOwner) {
-            const remove = document.createElement('button');
-            remove.type = 'button';
-            remove.className = 'comment-delete';
-            remove.textContent = 'Excluir';
-            remove.addEventListener('click', () => void excluirComentario(comment));
-            actions.appendChild(remove);
+            addMenuItem('Excluir', () => excluirComentario(comment), true);
         }
+        if (!isCommentAuthor) {
+            addMenuItem('Denunciar', () => denunciarComentario(comment), true);
+        }
+        menuTrigger.addEventListener('click', event => {
+            event.stopPropagation();
+            const shouldOpen = menuItems.hidden;
+            fecharMenusComentario();
+            menuItems.hidden = !shouldOpen;
+            menuTrigger.setAttribute('aria-expanded', String(shouldOpen));
+        });
+        menu.append(menuTrigger, menuItems);
+        actions.appendChild(menu);
+
         content.append(actions, replies);
 
-        commentItem.append(avatar, content);
+        commentItem.append(avatar, content, reaction);
         commentsList.appendChild(commentItem);
     });
+}
+
+function fecharMenusComentario() {
+    commentsList.querySelectorAll('.comment-menu-items').forEach(menu => {
+        menu.hidden = true;
+        menu.parentElement?.querySelector('.comment-menu-trigger')?.setAttribute('aria-expanded', 'false');
+    });
+}
+
+async function copiarTextoComentario(comment) {
+    try {
+        if (!navigator.clipboard?.writeText) throw new Error('A cópia não está disponível neste navegador.');
+        await navigator.clipboard.writeText(comment.text);
+        setFeedStatus('Comentário copiado.', { visible: true });
+    } catch (error) {
+        setFeedStatus(error.message || 'Não foi possível copiar o comentário.', { visible: true });
+    }
+}
+
+async function alternarComentarioFixado(comment) {
+    if (!usuarioEhDonoDoVideo()) return;
+
+    if (activeVideoElement?.dataset.isDemo === 'true') {
+        const wasPinned = Boolean(comment.isPinned);
+        commentsData.forEach(item => { item.isPinned = false; });
+        const target = commentsData.find(item => String(item.id) === String(comment.id));
+        if (target) target.isPinned = !wasPinned;
+        salvarComentariosDemo(
+            activeVideoElement.dataset.videoId || activeVideoElement.currentSrc || activeVideoElement.src,
+            commentsData,
+        );
+        renderComments();
+        setFeedStatus(wasPinned ? 'Comentário desafixado.' : 'Comentário fixado.', { visible: true });
+        return;
+    }
+
+    try {
+        const payload = await apiRequest(`/comments/${comment.id}/pin`, { method: 'PATCH' });
+        const updatedComment = normalizeApiComment(payload.data);
+        commentsData = commentsData.map(item => String(item.id) === String(comment.id)
+            ? updatedComment
+            : { ...item, isPinned: false });
+        renderComments();
+        setFeedStatus(updatedComment.isPinned ? 'Comentário fixado.' : 'Comentário desafixado.', { visible: true });
+    } catch (error) {
+        setFeedStatus(error.message || 'Não foi possível atualizar o comentário fixado.', { visible: true });
+    }
+}
+
+async function denunciarComentario(comment) {
+    if (!authenticatedUser) {
+        solicitarAutenticacao('Entre para denunciar um comentário.');
+        return;
+    }
+    if (activeVideoElement?.dataset.isDemo === 'true') {
+        setFeedStatus('Não é possível denunciar comentários de demonstração.', { visible: true });
+        return;
+    }
+
+    try {
+        await apiRequest(`/comments/${comment.id}/report`, {
+            method: 'POST',
+            body: { reason: 'other' },
+        });
+        setFeedStatus('Denúncia enviada para análise.', { visible: true });
+    } catch (error) {
+        setFeedStatus(error.message || 'Não foi possível denunciar o comentário.', { visible: true });
+    }
 }
 
 // --- 3. Seleção dos elementos ---
@@ -278,10 +413,14 @@ const commentsContent = document.querySelector('.comments-content');
 const commentsList = document.querySelector('.comments-list');
 const closeComments = document.querySelector('.close-comments');
 const commentInput = document.querySelector('.comment-input input');
-const sendComment = document.querySelector('.comment-input button');
+const sendComment = document.querySelector('.comment-send-button');
+const commentComposer = document.querySelector('.comment-composer');
+const commentEmojiButton = document.querySelector('.comment-emoji-button');
+const commentEmojiPicker = document.querySelector('.comment-emoji-picker');
 const btnInicio = document.getElementById('btnInicio');
 const btnDiscover = document.getElementById('btnDiscover');
 const btnProfile = document.getElementById('btnProfile');
+const profileNavAvatar = document.getElementById('profile-nav-avatar');
 const btnUpload = document.getElementById('btnUpload');
 const btnInbox = document.getElementById('btnInbox');
 const videoFileInput = document.getElementById('video-file-input');
@@ -428,13 +567,17 @@ const playlistsModal = document.getElementById('playlists-modal');
 const playlistsList = document.getElementById('playlists-list');
 const playlistForm = document.getElementById('playlist-form');
 const cropModal = document.getElementById('crop-modal');
+const cropTitle = document.getElementById('crop-title');
+const cropHelp = document.querySelector('.crop-help');
 const cropImage = document.getElementById('crop-image');
+const cropPreview = document.querySelector('.crop-preview');
 const cropX = document.getElementById('crop-x');
 const cropY = document.getElementById('crop-y');
 const cropZoom = document.getElementById('crop-zoom');
 const confirmCrop = document.getElementById('confirm-crop');
 let cropObjectUrl = null;
 let cropFile = null;
+let cropImageType = 'cover';
 let cropDragging = false;
 let cropDragStart = null;
 const notificationsModal = document.getElementById('notifications-modal');
@@ -774,7 +917,13 @@ async function executarPesquisa() {
 }
 
 // --- 4. Eventos ---
-commentsContent.addEventListener('click', e => e.stopPropagation());
+commentsContent.addEventListener('click', event => {
+    if (!commentEmojiPicker.contains(event.target) && !commentEmojiButton.contains(event.target)) {
+        fecharSeletorEmoji();
+    }
+    if (!event.target.closest('.comment-menu')) fecharMenusComentario();
+    event.stopPropagation();
+});
 dismissFeedNotice.addEventListener('click', () => { feedNotice.hidden = true; });
 retryFeed.addEventListener('click', () => {
     feedNotice.hidden = true;
@@ -949,13 +1098,15 @@ function atualizarProgressoPublicacao(percent, visible = true, label = 'Enviando
 function capturarCapaPublicacao() {
     const video = publishDetailPreview;
     const canvas = publishCoverCanvas;
-    if (!video.videoWidth || !video.videoHeight) return;
+    if (!video.videoWidth || !video.videoHeight || video.readyState < 2) return;
     const ratio = video.videoWidth / video.videoHeight;
     canvas.width = 320;
     canvas.height = Math.max(180, Math.round(320 / ratio));
     const context = canvas.getContext('2d');
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(blob => { publishCoverBlob = blob; }, 'image/jpeg', .86);
+    canvas.toBlob(blob => {
+        if (blob && blob.size > 0) publishCoverBlob = blob;
+    }, 'image/jpeg', .86);
 }
 
 function desenharFaixaCorte() {
@@ -996,11 +1147,16 @@ publishDetailPreview.addEventListener('loadedmetadata', () => {
     publishTrimEndRange.value = String(duration);
     desenharFaixaCorte();
     atualizarFaixaCorte();
-    capturarCapaPublicacao();
+    if (publishDetailPreview.readyState >= 2) {
+        capturarCapaPublicacao();
+    } else {
+        publishDetailPreview.addEventListener('loadeddata', capturarCapaPublicacao, { once: true });
+    }
 });
 publishCoverRange.addEventListener('input', () => {
     const targetTime = Number(publishCoverRange.value) || 0;
     publishDetailPreview.currentTime = targetTime;
+    publishDetailPreview.removeEventListener('seeked', capturarCapaPublicacao);
     publishDetailPreview.addEventListener('seeked', capturarCapaPublicacao, { once: true });
 });
 publishTrimStartRange.addEventListener('input', () => atualizarFaixaCorte(Number(publishTrimStartRange.value)));
@@ -1176,6 +1332,10 @@ publishAgeRestricted.addEventListener('change', salvarRascunhoPublicacao);
 publishHighQuality.addEventListener('change', salvarRascunhoPublicacao);
 publishSubmit.addEventListener('click', async () => {
     if (!pendingPublishFile) return;
+    if (!authToken || !authenticatedUser) {
+        solicitarAutenticacao('Sua sessão expirou. Entre novamente para publicar.');
+        return;
+    }
     const hashtagCount = contarHashtags(publishDescription.value);
     if (hashtagCount > 10) {
         publishStatus.textContent = 'Use no máximo 10 hashtags na descrição.';
@@ -1197,7 +1357,6 @@ publishSubmit.addEventListener('click', async () => {
     publishSubmit.disabled = true;
     publishStatus.textContent = 'Preparando o vídeo…';
     const file = await cortarVideoSeNecessario(originalFile);
-    publishSubmit.disabled = false;
     void publicarVideo(file, metadata);
 });
 audioUnlockButton.addEventListener('click', () => {
@@ -1232,7 +1391,14 @@ volumeRange.addEventListener('input', () => {
     }
     mostrarControleDeSom(true);
 });
-videoFileInput.addEventListener('change', () => prepararPublicacao(videoFileInput.files?.[0]));
+videoFileInput.addEventListener('change', () => {
+    if (!authToken || !authenticatedUser) {
+        solicitarAutenticacao('Entre na sua conta para publicar vídeos.');
+        videoFileInput.value = '';
+        return;
+    }
+    prepararPublicacao(videoFileInput.files?.[0]);
+});
 closeAuth.addEventListener('click', fecharAutenticacao);
 authModal.addEventListener('click', event => {
     if (event.target === authModal) fecharAutenticacao();
@@ -1285,23 +1451,29 @@ profileAvatarUpload.addEventListener('click', () => {
 profileImageInput.addEventListener('change', () => {
     const file = profileImageInput.files?.[0];
     if (!file) return;
-    if (profileImageInput.dataset.imageType === 'cover') abrirEditorCapa(file);
-    else void enviarImagemPerfil(file);
+    abrirEditorImagem(file);
 });
 profileCoverUpload.addEventListener('click', () => {
     profileImageInput.dataset.imageType = 'cover';
     profileImageInput.click();
 });
-document.querySelectorAll('.close-crop').forEach(button => button.addEventListener('click', fecharEditorCapa));
-cropX.addEventListener('input', atualizarPreviaCapa);
-cropY.addEventListener('input', atualizarPreviaCapa);
-cropZoom.addEventListener('input', atualizarPreviaCapa);
-cropImage.addEventListener('pointerdown', iniciarArrasteCapa);
-cropImage.addEventListener('pointermove', moverArrasteCapa);
-cropImage.addEventListener('pointerup', finalizarArrasteCapa);
-cropImage.addEventListener('pointercancel', finalizarArrasteCapa);
+document.querySelectorAll('.close-crop').forEach(button => button.addEventListener('click', fecharEditorImagem));
+cropX.addEventListener('input', atualizarPreviaImagem);
+cropY.addEventListener('input', atualizarPreviaImagem);
+cropZoom.addEventListener('input', atualizarPreviaImagem);
+cropImage.addEventListener('load', atualizarPreviaImagem);
+cropImage.addEventListener('error', () => {
+    fecharEditorImagem();
+    profileError.textContent = 'Não foi possível abrir esta imagem. Escolha outro arquivo.';
+    profileError.hidden = false;
+});
+cropImage.addEventListener('pointerdown', iniciarArrasteImagem);
+cropImage.addEventListener('pointermove', moverArrasteImagem);
+cropImage.addEventListener('pointerup', finalizarArrasteImagem);
+cropImage.addEventListener('pointercancel', finalizarArrasteImagem);
 cropImage.addEventListener('dragstart', event => event.preventDefault());
-confirmCrop.addEventListener('click', () => void confirmarCorteCapa());
+confirmCrop.addEventListener('click', () => void confirmarCorteImagem());
+window.addEventListener('resize', atualizarPreviaImagem);
 profileForm.addEventListener('submit', event => {
     event.preventDefault();
     void salvarPerfil();
@@ -1321,6 +1493,14 @@ document.addEventListener('keydown', event => {
         return;
     }
     if (event.key !== 'Escape') return;
+    if (commentsList.querySelector('.comment-menu-items:not([hidden])')) {
+        fecharMenusComentario();
+        return;
+    }
+    if (!commentEmojiPicker.hidden) {
+        fecharSeletorEmoji();
+        return;
+    }
     if (authModal.classList.contains('active')) fecharAutenticacao();
     else if (profileModal.classList.contains('active')) fecharPerfil();
     else if (notificationsModal.classList.contains('active')) fecharNotificacoes();
@@ -1337,6 +1517,30 @@ commentInput.addEventListener('keydown', e => {
         void adicionarComentario();
     }
 });
+commentEmojiButton.addEventListener('click', () => {
+    commentEmojiPicker.hidden = !commentEmojiPicker.hidden;
+    commentEmojiButton.setAttribute('aria-expanded', String(!commentEmojiPicker.hidden));
+});
+commentEmojiPicker.addEventListener('emoji-click', event => {
+    const emoji = event.detail?.unicode;
+    if (!emoji) return;
+    const start = commentInput.selectionStart;
+    const end = commentInput.selectionEnd;
+    commentInput.setRangeText(emoji, start, end, 'end');
+    fecharSeletorEmoji();
+    commentInput.focus();
+});
+document.addEventListener('click', event => {
+    if (!commentEmojiPicker.contains(event.target) && !commentEmojiButton.contains(event.target)) {
+        fecharSeletorEmoji();
+    }
+    if (!event.target.closest('.comment-menu')) fecharMenusComentario();
+});
+
+function fecharSeletorEmoji() {
+    commentEmojiPicker.hidden = true;
+    commentEmojiButton.setAttribute('aria-expanded', 'false');
+}
 
 container.addEventListener('click', e => {
     const profileLink = e.target.closest('.profile-link');
@@ -1431,28 +1635,12 @@ function configurarVideo(video) {
     video.addEventListener('error', removerBuffering);
 
     let clickTimeout = null;
-    let lastClickTime = 0;
     const doubleClickThreshold = 250;
 
     video.addEventListener('click', event => {
-        const now = Date.now();
-        const timeSinceLastClick = now - lastClickTime;
-        lastClickTime = now;
-
         // Inicia dentro do gesto do usuário, sem adiar a autorização de áudio.
         if (!audioUnlocked || (video === videos[0] && !manuallyStartedVideos.has(video))) {
             alternarReproducao(video);
-            return;
-        }
-
-        if (timeSinceLastClick < doubleClickThreshold) {
-            if (clickTimeout) {
-                clearTimeout(clickTimeout);
-                clickTimeout = null;
-            }
-            unlockAudio(video);
-            const likeButton = video.parentElement.querySelector('.sidebar-icon.like');
-            if (likeButton) void toggleLike(likeButton, true);
             return;
         }
 
@@ -1469,35 +1657,56 @@ function configurarVideo(video) {
     const progressBar = getProgressBar(video);
     if (progressBar) {
         let draggingProgress = false;
-        const seekFromPointer = event => {
-            // A primeira interação precisa ser registrada mesmo se o metadata
-            // ainda estiver carregando; assim o guard inicial não reinicia o vídeo.
+        let pendingSeekTime = null;
+        let resumeAfterSeek = false;
+        const getSeekTime = event => {
+            const range = getProgressRange(video);
+            if (!range) return null;
+            const rect = progressBar.getBoundingClientRect();
+            if (!rect.width) return null;
+            const percentage = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+            return range.start + percentage * (range.end - range.start);
+        };
+        const markAsUserRequested = () => {
             manuallyStartedVideos.add(video);
             video.dataset.userRequested = 'true';
-            if (!video.duration) return;
-            const rect = progressBar.getBoundingClientRect();
-            if (!rect.width) return;
-            const percentage = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-            video.currentTime = percentage * video.duration;
-            atualizarBarraProgresso(video);
         };
         progressBar.addEventListener('pointerdown', event => {
+            if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
             event.preventDefault();
             event.stopPropagation();
+            markAsUserRequested();
+            const seekTime = getSeekTime(event);
+            if (seekTime === null) return;
+
             draggingProgress = true;
+            resumeAfterSeek = !video.paused;
+            if (resumeAfterSeek) video.pause();
+            pendingSeekTime = seekTime;
+            atualizarBarraProgresso(video, pendingSeekTime);
             progressBar.setPointerCapture?.(event.pointerId);
-            seekFromPointer(event);
         }, true);
         progressBar.addEventListener('pointermove', event => {
             if (!draggingProgress) return;
             event.preventDefault();
             event.stopPropagation();
-            seekFromPointer(event);
+            const seekTime = getSeekTime(event);
+            if (seekTime === null) return;
+            pendingSeekTime = seekTime;
+            atualizarBarraProgresso(video, pendingSeekTime);
         });
         const stopDragging = event => {
             if (!draggingProgress) return;
+            event?.preventDefault();
             event?.stopPropagation();
             draggingProgress = false;
+            if (pendingSeekTime !== null) {
+                video.currentTime = pendingSeekTime;
+                atualizarBarraProgresso(video, pendingSeekTime);
+            }
+            pendingSeekTime = null;
+            if (resumeAfterSeek) playVideo(video);
+            resumeAfterSeek = false;
             if (event?.pointerId !== undefined) progressBar.releasePointerCapture?.(event.pointerId);
         };
         progressBar.addEventListener('pointerup', stopDragging);
@@ -1505,7 +1714,6 @@ function configurarVideo(video) {
         progressBar.addEventListener('click', event => {
             event.preventDefault();
             event.stopPropagation();
-            seekFromPointer(event);
         });
     }
 
@@ -1513,24 +1721,40 @@ function configurarVideo(video) {
         event.preventDefault();
         clearTimeout(clickTimeout);
         clickTimeout = null;
-        lastClickTime = 0;
         const likeButton = video.parentElement.querySelector('.sidebar-icon.like');
         if (likeButton && !likeButton.querySelector('i').classList.contains('liked')) {
             void toggleLike(likeButton, true);
         }
 
+        const likeIcon = likeButton?.querySelector('i');
+        if (!likeIcon) return;
+
+        const likeRect = likeIcon.getBoundingClientRect();
         const heart = document.createElement('i');
         heart.className = 'ri-heart-fill floating-heart';
+        heart.style.left = `${event.clientX}px`;
+        heart.style.top = `${event.clientY}px`;
+        document.body.appendChild(heart);
 
-        const rect = video.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-
-        heart.style.left = `${x}px`;
-        heart.style.top = `${y}px`;
-
-        video.parentElement.appendChild(heart);
-        setTimeout(() => heart.remove(), 800);
+        const deltaX = likeRect.left + likeRect.width / 2 - event.clientX;
+        const deltaY = likeRect.top + likeRect.height / 2 - event.clientY;
+        const heartAnimation = heart.animate([
+            {
+                transform: 'translate(-50%, -50%) scale(0) rotate(-15deg)',
+                opacity: 1,
+                offset: 0,
+            },
+            {
+                transform: 'translate(-50%, -50%) scale(1.2) rotate(10deg)',
+                opacity: 1,
+                offset: 0.3,
+            },
+            {
+                transform: `translate(calc(-50% + ${deltaX}px), calc(-50% + ${deltaY}px)) scale(.35) rotate(0deg)`,
+                opacity: 0,
+            },
+        ], { duration: 800, easing: 'ease-out', fill: 'forwards' });
+        heartAnimation.onfinish = () => heart.remove();
     });
 
     video.addEventListener('timeupdate', () => atualizarBarraProgresso(video));
@@ -1872,6 +2096,11 @@ function setAuthError(message = '') {
 
 function atualizarInterfaceAutenticacao() {
     const isAuthenticated = Boolean(authenticatedUser);
+    const avatarUrl = isAuthenticated ? safeMediaUrl(authenticatedUser.avatar_url) : '';
+    const showAvatar = Boolean(avatarUrl) && profileNavAvatar.dataset.failedUrl !== avatarUrl;
+    profileNavAvatar.hidden = !showAvatar;
+    btnProfile.querySelector('i').hidden = showAvatar;
+    if (showAvatar && profileNavAvatar.src !== avatarUrl) profileNavAvatar.src = avatarUrl;
     btnProfile.querySelector('span').textContent = isAuthenticated ? 'EU' : 'Entrar';
     authAccount.hidden = !isAuthenticated;
     authForm.hidden = isAuthenticated;
@@ -1882,6 +2111,12 @@ function atualizarInterfaceAutenticacao() {
         authUserName.textContent = username.startsWith('@') ? username : `@${username}`;
     }
 }
+
+profileNavAvatar.addEventListener('error', () => {
+    profileNavAvatar.dataset.failedUrl = profileNavAvatar.src;
+    profileNavAvatar.hidden = true;
+    btnProfile.querySelector('i').hidden = false;
+});
 
 let profileTargetUserId = null;
 let viewingOwnProfile = true;
@@ -2203,12 +2438,13 @@ async function abrirPlaylists(video = null) {
 async function carregarPlaylists() {
     document.getElementById('playlists-title').textContent = 'Minhas playlists';
     playlistsList.replaceChildren();
-    const payload = await apiRequest('/playlists');
-    if (!payload.data.length) {
-        playlistsList.innerHTML = '<p class="notifications-empty">Crie sua primeira playlist.</p>';
-        return;
-    }
-    payload.data.forEach(playlist => {
+    try {
+        const payload = await apiRequest('/playlists');
+        if (!payload.data.length) {
+            playlistsList.innerHTML = '<p class="notifications-empty">Crie sua primeira playlist.</p>';
+            return;
+        }
+        payload.data.forEach(playlist => {
         const item = document.createElement('div');
         item.className = `playlist-item${playlistVideoTarget ? '' : ' is-browseable'}`;
         const name = document.createElement('strong');
@@ -2239,7 +2475,11 @@ async function carregarPlaylists() {
             item.appendChild(add);
         }
         playlistsList.appendChild(item);
-    });
+        });
+    } catch (error) {
+        playlistsList.innerHTML = '<p class="notifications-empty">Não foi possível carregar as playlists.</p>';
+        setFeedStatus(error.message || 'Não foi possível carregar as playlists.', { visible: true });
+    }
 }
 
 async function abrirDetalhePlaylist(playlistId, playlistName) {
@@ -2405,10 +2645,13 @@ async function carregarModeracao() {
             const item = document.createElement('article');
             item.className = 'notification-item moderation-item';
             const video = report.video || {};
+            const reportedComment = report.comment;
             const description = document.createElement('strong');
-            description.textContent = video.description || 'Vídeo sem descrição';
+            description.textContent = reportedComment
+                ? `Comentário denunciado: ${reportedComment.body}`
+                : video.description || 'Vídeo sem descrição';
             const details = document.createElement('span');
-            details.textContent = `Motivo: ${report.reason} · Status: ${report.status}`;
+            details.textContent = `${reportedComment ? `Vídeo: ${video.description || 'sem descrição'} · ` : ''}Motivo: ${report.reason} · Status: ${report.status}`;
             item.append(description, details);
             const resolve = document.createElement('button');
             resolve.type = 'button'; resolve.textContent = 'Marcar como resolvida';
@@ -2429,7 +2672,7 @@ async function carregarModeracao() {
 }
 
 function selecionarAbaNotificacoes(tab) {
-    [notificationTabAll, notificationTabMentions, notificationTabHistory].forEach(button => button?.classList.toggle('active', button === tab));
+    [notificationTabAll, notificationTabMentions, notificationTabHistory, notificationTabModeration].forEach(button => button?.classList.toggle('active', button === tab));
     if (tab === notificationTabHistory) void carregarHistoricoVisualizacoes();
     else if (tab === notificationTabModeration) void carregarModeracao();
     else void abrirNotificacoes(tab === notificationTabMentions);
@@ -2506,9 +2749,19 @@ async function salvarPerfil() {
 
 async function enviarImagemPerfil(file) {
     if (!file || !viewingOwnProfile) return;
+    if (!authToken || !authenticatedUser) {
+        solicitarAutenticacao('Entre novamente para alterar as imagens do perfil.');
+        return;
+    }
+    const imageType = profileImageInput.dataset.imageType || 'avatar';
     const formData = new FormData();
     formData.append('image', file);
-    formData.append('type', profileImageInput.dataset.imageType || 'avatar');
+    formData.append('type', imageType);
+    profileError.hidden = true;
+    profileAvatarUpload.disabled = true;
+    profileCoverUpload.disabled = true;
+    profileError.textContent = `Enviando ${imageType === 'cover' ? 'a capa' : 'a foto de perfil'}…`;
+    profileError.hidden = false;
     try {
         const response = await fetch(apiUrl('/auth/profile/image'), {
             method: 'POST',
@@ -2516,86 +2769,151 @@ async function enviarImagemPerfil(file) {
             body: formData,
         });
         const payload = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(getApiErrorMessage(payload, 'Não foi possível enviar o avatar.'));
+        if (!response.ok) throw new Error(getApiErrorMessage(
+            payload,
+            `Não foi possível enviar ${imageType === 'cover' ? 'a capa' : 'a foto de perfil'}.`,
+        ));
         if (payload?.user) {
             authenticatedUser = { ...authenticatedUser, ...payload.user };
             atualizarInterfaceAutenticacao();
+            profileAvatar.src = safeMediaUrl(payload.user.avatar_url) || 'img/vibe-mark.png';
+            profileCover.src = safeMediaUrl(payload.user.cover_url) || '';
+            profileCover.parentElement.classList.toggle('has-image', Boolean(payload.user.cover_url));
+            document.getElementById('profile-edit-avatar').value = payload.user.avatar_url || '';
+            document.getElementById('profile-edit-cover').value = payload.user.cover_url || '';
         }
+        profileError.hidden = true;
+        setFeedStatus(imageType === 'cover' ? 'Capa do perfil atualizada.' : 'Foto de perfil atualizada.');
         await abrirPerfil(profileActiveTab);
     } catch (error) {
-        profileError.textContent = error.message;
+        profileError.textContent = error.message || 'Não foi possível enviar a imagem.';
         profileError.hidden = false;
     } finally {
+        profileAvatarUpload.disabled = false;
+        profileCoverUpload.disabled = false;
         profileImageInput.value = '';
         profileImageInput.dataset.imageType = 'avatar';
     }
 }
 
-function abrirEditorCapa(file) {
+function abrirEditorImagem(file) {
     cropFile = file;
+    cropImageType = profileImageInput.dataset.imageType || 'avatar';
+    const isAvatar = cropImageType === 'avatar';
+    cropModal.classList.toggle('avatar-crop', isAvatar);
+    cropTitle.textContent = isAvatar ? 'Ajustar foto de perfil' : 'Ajustar capa';
+    cropHelp.textContent = isAvatar
+        ? 'Arraste a imagem e ajuste o zoom para escolher o enquadramento circular.'
+        : 'Arraste a imagem e ajuste o zoom para escolher a área da capa.';
+    cropImage.alt = isAvatar ? 'Prévia da foto de perfil' : 'Prévia da capa';
+    confirmCrop.textContent = isAvatar ? 'Usar esta foto' : 'Usar esta capa';
+    confirmCrop.disabled = true;
     if (cropObjectUrl) URL.revokeObjectURL(cropObjectUrl);
     cropObjectUrl = URL.createObjectURL(file);
     cropImage.src = cropObjectUrl;
     cropX.value = '50';
     cropY.value = '50';
     cropZoom.value = '100';
-    atualizarPreviaCapa();
+    atualizarPreviaImagem();
     cropModal.classList.add('active');
     cropModal.setAttribute('aria-hidden', 'false');
 }
 
-function atualizarPreviaCapa() {
-    cropImage.style.objectPosition = `${cropX.value}% ${cropY.value}%`;
-    cropImage.style.transform = `scale(${Number(cropZoom.value) / 100})`;
+function getCropLayout() {
+    const rect = cropPreview.getBoundingClientRect();
+    if (!cropImage.naturalWidth || !cropImage.naturalHeight || !rect.width || !rect.height) return null;
+    const baseScale = Math.max(rect.width / cropImage.naturalWidth, rect.height / cropImage.naturalHeight);
+    const zoom = Number(cropZoom.value) / 100;
+    const width = cropImage.naturalWidth * baseScale * zoom;
+    const height = cropImage.naturalHeight * baseScale * zoom;
+    return {
+        rect,
+        width,
+        height,
+        overflowX: Math.max(0, width - rect.width),
+        overflowY: Math.max(0, height - rect.height),
+    };
 }
 
-function iniciarArrasteCapa(event) {
+function atualizarPreviaImagem() {
+    const layout = getCropLayout();
+    if (!layout) return;
+    confirmCrop.disabled = false;
+    cropImage.style.width = `${layout.width}px`;
+    cropImage.style.height = `${layout.height}px`;
+    cropImage.style.left = `${(layout.rect.width - layout.width) * (Number(cropX.value) / 100)}px`;
+    cropImage.style.top = `${(layout.rect.height - layout.height) * (Number(cropY.value) / 100)}px`;
+}
+
+function iniciarArrasteImagem(event) {
     event.preventDefault();
     cropDragging = true;
     cropDragStart = { x: event.clientX, y: event.clientY, cropX: Number(cropX.value), cropY: Number(cropY.value) };
     cropImage.setPointerCapture(event.pointerId);
 }
 
-function moverArrasteCapa(event) {
+function moverArrasteImagem(event) {
     if (!cropDragging || !cropDragStart) return;
-    const rect = cropImage.parentElement.getBoundingClientRect();
-    cropX.value = String(Math.max(0, Math.min(100, cropDragStart.cropX - ((event.clientX - cropDragStart.x) / rect.width) * 100)));
-    cropY.value = String(Math.max(0, Math.min(100, cropDragStart.cropY - ((event.clientY - cropDragStart.y) / rect.height) * 100)));
-    atualizarPreviaCapa();
+    const layout = getCropLayout();
+    if (!layout) return;
+    if (layout.overflowX > 0) {
+        cropX.value = String(Math.max(0, Math.min(100,
+            cropDragStart.cropX - ((event.clientX - cropDragStart.x) / layout.overflowX) * 100)));
+    }
+    if (layout.overflowY > 0) {
+        cropY.value = String(Math.max(0, Math.min(100,
+            cropDragStart.cropY - ((event.clientY - cropDragStart.y) / layout.overflowY) * 100)));
+    }
+    atualizarPreviaImagem();
 }
 
-function finalizarArrasteCapa() {
+function finalizarArrasteImagem() {
     cropDragging = false;
     cropDragStart = null;
 }
 
-function fecharEditorCapa() {
+function fecharEditorImagem() {
     cropModal.classList.remove('active');
     cropModal.setAttribute('aria-hidden', 'true');
+    if (cropObjectUrl) URL.revokeObjectURL(cropObjectUrl);
+    cropObjectUrl = null;
+    cropImage.removeAttribute('src');
     cropFile = null;
     profileImageInput.value = '';
 }
 
-async function confirmarCorteCapa() {
+async function confirmarCorteImagem() {
     if (!cropFile || !cropImage.naturalWidth) return;
-    const ratio = 3;
+    const ratio = cropImageType === 'avatar' ? 1 : 3;
     const imageWidth = cropImage.naturalWidth;
     const imageHeight = cropImage.naturalHeight;
     const zoom = Number(cropZoom.value) / 100;
-    const cropWidth = Math.min(imageWidth, (imageHeight * ratio) / zoom);
+    const cropWidth = Math.min(imageWidth, imageHeight * ratio) / zoom;
     const cropHeight = cropWidth / ratio;
     const x = (imageWidth - cropWidth) * (Number(cropX.value) / 100);
     const y = (imageHeight - cropHeight) * (Number(cropY.value) / 100);
     const canvas = document.createElement('canvas');
     canvas.width = 1200;
     canvas.height = 400;
+    if (cropImageType === 'avatar') canvas.width = canvas.height = 800;
     const context = canvas.getContext('2d');
+    if (!context) {
+        profileError.textContent = 'Não foi possível preparar a imagem. Tente novamente.';
+        profileError.hidden = false;
+        return;
+    }
     context.drawImage(cropImage, x, y, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+    confirmCrop.disabled = true;
     canvas.toBlob(blob => {
-        if (!blob) return;
-        const croppedFile = new File([blob], `cover-${Date.now()}.jpg`, { type: 'image/jpeg' });
-        fecharEditorCapa();
-        profileImageInput.dataset.imageType = 'cover';
+        if (!blob) {
+            confirmCrop.disabled = false;
+            profileError.textContent = 'Não foi possível preparar a imagem. Tente novamente.';
+            profileError.hidden = false;
+            return;
+        }
+        const prefix = cropImageType === 'avatar' ? 'avatar' : 'cover';
+        const croppedFile = new File([blob], `${prefix}-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        fecharEditorImagem();
         void enviarImagemPerfil(croppedFile);
     }, 'image/jpeg', 0.9);
 }
@@ -2852,7 +3170,24 @@ function normalizeApiComment(comment) {
         text: comment.body || '',
         parentId: comment.parent_id || null,
         repliesCount: Number(comment.replies_count) || 0,
+        likesCount: Number(comment.likes_count) || 0,
+        isPinned: comment.is_pinned === true,
+        createdAt: comment.created_at || null,
     };
+}
+
+function formatCommentTime(value) {
+    if (!value) return '';
+    const timestamp = Date.parse(value);
+    if (!Number.isFinite(timestamp)) return '';
+
+    const elapsedMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+    if (elapsedMinutes < 1) return 'agora';
+    if (elapsedMinutes < 60) return `há ${elapsedMinutes} min`;
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    if (elapsedHours < 24) return `há ${elapsedHours}h`;
+    const elapsedDays = Math.floor(elapsedHours / 24);
+    return `há ${elapsedDays}d`;
 }
 
 function updateCommentsCounter(videoElement, count) {
@@ -2869,7 +3204,7 @@ function updateCommentsCounter(videoElement, count) {
 
 function updateCommentsTitle() {
     const count = commentsData.length;
-    commentsTitle.textContent = `${count} ${count === 1 ? 'comentário' : 'comentários'}`;
+    commentsTitle.textContent = `Comentários (${count})`;
 }
 
 async function carregarComentarios(videoId, requestId) {
@@ -2882,9 +3217,16 @@ async function carregarComentarios(videoId, requestId) {
 
 // --- 6. Comentários ---
 async function abrirComentarios(video) {
+    if (!video?.dataset.videoId) {
+        setFeedStatus('Comentários indisponíveis para este vídeo.', { visible: true });
+        return;
+    }
     const requestId = ++commentsRequestId;
     activeVideoElement = video;
     activeVideoId = video.dataset.videoId || null;
+    commentReplyTarget = null;
+    commentInput.placeholder = 'Adicionar comentário...';
+    fecharSeletorEmoji();
     commentsModal.classList.add('active');
     document.getElementById('top').classList.add('comments-open');
     setTimeout(() => {
@@ -2895,13 +3237,14 @@ async function abrirComentarios(video) {
     const canComment = (isDemo ? Boolean(authenticatedUser) : video.dataset.allowComments === 'true') && Boolean(activeVideoId);
     commentInput.disabled = !canComment || !activeVideoId;
     sendComment.disabled = !canComment || !activeVideoId;
+    commentEmojiButton.disabled = !canComment || !activeVideoId;
     commentsData = [];
     renderComments();
     commentsNotice.hidden = true;
 
     if (isDemo) {
         commentsData = carregarComentariosDemo(video.dataset.videoId || video.currentSrc || video.src);
-        commentsTitle.textContent = `${commentsData.length} ${commentsData.length === 1 ? 'comentário' : 'comentários'}`;
+        updateCommentsTitle();
         if (!authenticatedUser) {
             commentsNotice.textContent = 'Entre para publicar um comentário.';
             commentsNotice.hidden = false;
@@ -2931,6 +3274,9 @@ async function abrirComentarios(video) {
 
 function fecharComentarios() {
     commentsRequestId++;
+    commentReplyTarget = null;
+    commentInput.placeholder = 'Adicionar comentário...';
+    fecharSeletorEmoji();
     commentsContent.style.transform = 'translateY(100%)';
     document.getElementById('top').classList.remove('comments-open');
     setTimeout(() => commentsModal.classList.remove('active'), 300);
@@ -2990,21 +3336,56 @@ async function excluirComentario(comment) {
     if (!window.confirm('Excluir este comentário?')) return;
 
     if (activeVideoElement?.dataset.isDemo === 'true') {
-        commentsData = commentsData.filter(item => String(item.id) !== String(comment.id));
+        const removedIds = new Set();
+        const collectDescendants = id => {
+            commentsData.forEach(item => {
+                if (String(item.id) === String(id) || String(item.parentId) === String(id)) {
+                    if (!removedIds.has(String(item.id))) {
+                        removedIds.add(String(item.id));
+                        collectDescendants(item.id);
+                    }
+                }
+            });
+        };
+        collectDescendants(comment.id);
+        commentsData = commentsData.filter(item => !removedIds.has(String(item.id)));
         salvarComentariosDemo(activeVideoElement.dataset.videoId || activeVideoElement.currentSrc || activeVideoElement.src, commentsData);
         renderComments();
         updateCommentsTitle();
+        if (activeVideoElement) {
+            const count = Number(activeVideoElement.parentElement.querySelector('.sidebar-icon.comment span')?.dataset.count) || 0;
+            updateCommentsCounter(activeVideoElement, count - removedIds.size);
+        }
         return;
     }
 
     try {
         await apiRequest(`/comments/${comment.id}`, { method: 'DELETE' });
-        commentsData = commentsData.filter(item => String(item.id) !== String(comment.id));
+        const removedIds = new Set();
+        const addDemoDescendants = id => {
+            commentsData.forEach(item => {
+                if (String(item.id) === String(id) || String(item.parentId) === String(id)) {
+                    if (!removedIds.has(String(item.id))) {
+                        removedIds.add(String(item.id));
+                        addDemoDescendants(item.id);
+                    }
+                }
+            });
+        };
+        if (activeVideoElement?.dataset.isDemo !== 'true') {
+            removedIds.add(String(comment.id));
+        } else {
+            addDemoDescendants(comment.id);
+        }
+        commentsData = commentsData.filter(item => !removedIds.has(String(item.id)));
         renderComments();
         updateCommentsTitle();
         if (activeVideoElement) {
             const count = Number(activeVideoElement.parentElement.querySelector('.sidebar-icon.comment span')?.dataset.count) || 0;
-            updateCommentsCounter(activeVideoElement, count - 1);
+            const removedCount = activeVideoElement.dataset.isDemo === 'true'
+                ? removedIds.size
+                : 1 + (comment.parentId ? 0 : Number(comment.repliesCount) || 0);
+            updateCommentsCounter(activeVideoElement, count - removedCount);
         }
     } catch (error) {
         setFeedStatus(error.message || 'Não foi possível excluir o comentário.', { visible: true });
@@ -3051,26 +3432,37 @@ async function executarOpcaoVideo(option) {
         const card = video.closest('.video-container');
         const authorId = video.closest('.video-container')?.querySelector('.video-follow')?.dataset.userId;
         if (typeof registrarSinalVideo === 'function') registrarSinalVideo(video, option === 'user' ? -8 : -5);
-        if (authenticatedUser && !video.dataset.isDemo) {
-            await apiRequest(option === 'user' ? `/users/${authorId}/hide` : `/videos/${video.dataset.videoId}/hide`, { method: 'POST' });
+        try {
+            if (authenticatedUser && !video.dataset.isDemo) {
+                await apiRequest(option === 'user' ? `/users/${authorId}/hide` : `/videos/${video.dataset.videoId}/hide`, { method: 'POST' });
+            }
+            if (option === 'user' && authorId) {
+                [...container.querySelectorAll('.video-container')].forEach(item => {
+                    if (item.querySelector(`.video-follow[data-user-id="${CSS.escape(authorId)}"]`)) item.remove();
+                });
+                feedVideos = feedVideos.filter(item => String(item.authorId) !== String(authorId));
+            } else {
+                card?.remove();
+                const videoId = video.dataset.videoId;
+                if (videoId) feedVideos = feedVideos.filter(item => String(item.id) !== String(videoId));
+            }
+            refreshVideoBindings();
+            setFeedStatus('Vídeo ocultado.');
+        } catch (error) {
+            setFeedStatus(error.message || 'Não foi possível ocultar o vídeo.', { visible: true });
         }
-        if (option === 'user' && authorId) {
-            [...container.querySelectorAll('.video-container')].forEach(item => {
-                if (item.querySelector(`.video-follow[data-user-id="${CSS.escape(authorId)}"]`)) item.remove();
-            });
-        } else {
-            card?.remove();
-        }
-        refreshVideoBindings();
-        setFeedStatus('Vídeo ocultado.');
     } else if (option === 'report') {
-        if (authenticatedUser && !video.dataset.isDemo) {
-            await apiRequest(`/videos/${video.dataset.videoId}/report`, { method: 'POST', body: { reason: 'other' } });
-        } else if (!authenticatedUser) {
-            solicitarAutenticacao('Entre para denunciar um vídeo.');
-            return;
+        try {
+            if (authenticatedUser && !video.dataset.isDemo) {
+                await apiRequest(`/videos/${video.dataset.videoId}/report`, { method: 'POST', body: { reason: 'other' } });
+            } else if (!authenticatedUser) {
+                solicitarAutenticacao('Entre para denunciar um vídeo.');
+                return;
+            }
+            setFeedStatus('Denúncia enviada para análise.');
+        } catch (error) {
+            setFeedStatus(error.message || 'Não foi possível enviar a denúncia.', { visible: true });
         }
-        setFeedStatus('Denúncia enviada para análise.');
     }
     fecharOpcoesVideo();
 }
@@ -3095,6 +3487,8 @@ async function adicionarComentario() {
             avatar: authenticatedUser.avatar_url || '',
             text: texto,
             parentId: commentReplyTarget,
+            likesCount: 0,
+            createdAt: new Date().toISOString(),
         };
         commentsData.unshift(comment);
         salvarComentariosDemo(activeVideoElement.dataset.videoId || activeVideoElement.currentSrc || activeVideoElement.src, commentsData);
@@ -3104,7 +3498,7 @@ async function adicionarComentario() {
         updateCommentsCounter(activeVideoElement, currentCount + 1);
         commentInput.value = '';
         commentReplyTarget = null;
-        commentInput.placeholder = 'Adicionar comentário';
+        commentInput.placeholder = 'Adicionar comentário...';
         commentsList.scrollTop = 0;
         return;
     }
@@ -3123,7 +3517,7 @@ async function adicionarComentario() {
         ) + 1);
         commentInput.value = '';
         commentReplyTarget = null;
-        commentInput.placeholder = 'Adicionar comentário';
+        commentInput.placeholder = 'Adicionar comentário...';
         commentsList.scrollTop = 0;
     } catch (error) {
         if (error.status === 401) {
@@ -3296,12 +3690,13 @@ async function cortarVideoSeNecessario(file) {
     const sourceUrl = URL.createObjectURL(file);
     const video = document.createElement('video');
     video.src = sourceUrl;
-    video.muted = false;
+    video.muted = true;
     video.playsInline = true;
     try {
         await new Promise((resolve, reject) => {
-            video.addEventListener('loadedmetadata', resolve, { once: true });
-            video.addEventListener('error', reject, { once: true });
+            const timer = setTimeout(() => reject(new Error('timeout')), 6000);
+            video.addEventListener('loadedmetadata', () => { clearTimeout(timer); resolve(); }, { once: true });
+            video.addEventListener('error', () => { clearTimeout(timer); reject(); }, { once: true });
         });
         const safeStart = Math.min(start, Math.max(0, video.duration - .1));
         const safeEnd = Math.min(end > safeStart ? end : video.duration, video.duration);
@@ -3313,22 +3708,25 @@ async function cortarVideoSeNecessario(file) {
         const recorder = new MediaRecorder(stream, {
             ...(mimeType ? { mimeType } : {}),
             videoBitsPerSecond: 2_500_000,
-            audioBitsPerSecond: 128_000,
         });
         const chunks = [];
-        recorder.addEventListener('dataavailable', event => { if (event.data.size) chunks.push(event.data); });
+        recorder.addEventListener('dataavailable', event => { if (event.data && event.data.size > 0) chunks.push(event.data); });
         const result = new Promise(resolve => recorder.addEventListener('stop', () => {
+            stream.getTracks().forEach(track => track.stop());
             const type = recorder.mimeType || 'video/webm';
             resolve(chunks.length ? new File([new Blob(chunks, { type })], `vibe-corte-${Date.now()}.webm`, { type }) : file);
         }, { once: true }));
         recorder.start(200);
         await video.play();
         await new Promise(resolve => {
-            const check = () => video.currentTime >= safeEnd ? resolve() : requestAnimationFrame(check);
-            check();
+            const check = setInterval(() => {
+                if (video.currentTime >= safeEnd || video.paused || video.ended) {
+                    clearInterval(check);
+                    resolve();
+                }
+            }, 100);
         });
         recorder.stop();
-        stream.getTracks().forEach(track => track.stop());
         return await result;
     } catch {
         return file;
@@ -3412,7 +3810,7 @@ async function publicarVideo(file, metadata = {}) {
                 video_url: uploadPayload.data.video_url,
                 thumbnail_url: uploadPayload.data.thumbnail_url || null,
                 cloudinary_public_id: uploadPayload.data.cloudinary_public_id,
-                duration_seconds: uploadPayload.data.duration_seconds,
+                duration_seconds: uploadPayload.data.duration_seconds ? Math.max(1, Math.round(Number(uploadPayload.data.duration_seconds))) : null,
                 visibility: metadata.visibility || 'public',
                 allow_comments: metadata.allow_comments !== false,
                 scheduled_at: metadata.scheduled_at || null,

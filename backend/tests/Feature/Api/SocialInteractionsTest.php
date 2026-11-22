@@ -114,6 +114,72 @@ class SocialInteractionsTest extends TestCase
             ->assertJsonPath('data.0.author.id', $viewer->id);
     }
 
+    public function test_video_owner_can_pin_only_one_comment_and_pinned_comments_appear_first(): void
+    {
+        $owner = User::factory()->create();
+        $author = User::factory()->create();
+        $stranger = User::factory()->create();
+        $video = $this->createVideo($owner);
+        $firstComment = $this->createComment($video, $author, 'Primeiro comentário');
+        $secondComment = $this->createComment($video, $author, 'Segundo comentário');
+
+        $this->actingAs($owner, 'sanctum')
+            ->patchJson("/api/comments/{$firstComment->id}/pin")
+            ->assertOk()
+            ->assertJsonPath('data.is_pinned', true);
+
+        $this->actingAs($owner, 'sanctum')
+            ->patchJson("/api/comments/{$secondComment->id}/pin")
+            ->assertOk()
+            ->assertJsonPath('data.is_pinned', true);
+
+        $this->getJson("/api/videos/{$video->id}/comments")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $secondComment->id);
+
+        $this->actingAs($stranger, 'sanctum')
+            ->patchJson("/api/comments/{$firstComment->id}/pin")
+            ->assertForbidden();
+
+        $this->actingAs($owner, 'sanctum')
+            ->patchJson("/api/comments/{$secondComment->id}/pin")
+            ->assertOk()
+            ->assertJsonPath('data.is_pinned', false);
+
+        $this->assertNull($firstComment->fresh()->pinned_at);
+        $this->assertNull($secondComment->fresh()->pinned_at);
+    }
+
+    public function test_users_cannot_report_their_own_comment_and_duplicate_reports_are_idempotent(): void
+    {
+        $owner = User::factory()->create();
+        $author = User::factory()->create();
+        $reporter = User::factory()->create();
+        $video = $this->createVideo($owner);
+        $comment = $this->createComment($video, $author, 'Comentário denunciável');
+
+        $this->actingAs($author, 'sanctum')
+            ->postJson("/api/comments/{$comment->id}/report")
+            ->assertUnprocessable();
+
+        $this->actingAs($reporter, 'sanctum')
+            ->postJson("/api/comments/{$comment->id}/report")
+            ->assertCreated()
+            ->assertJsonPath('created', true);
+
+        $this->actingAs($reporter, 'sanctum')
+            ->postJson("/api/comments/{$comment->id}/report")
+            ->assertOk()
+            ->assertJsonPath('created', false);
+
+        $this->assertDatabaseCount('video_reports', 1);
+        $this->assertDatabaseHas('video_reports', [
+            'user_id' => $reporter->id,
+            'video_id' => $video->id,
+            'comment_id' => $comment->id,
+        ]);
+    }
+
     public function test_following_the_same_user_twice_creates_only_one_notification(): void
     {
         $follower = User::factory()->create();
@@ -352,5 +418,14 @@ class SocialInteractionsTest extends TestCase
             'video_url' => 'https://example.com/video.mp4',
             'duration_seconds' => 30,
         ]);
+    }
+
+    private function createComment(Video $video, User $author, string $body): Comment
+    {
+        $comment = new Comment(['body' => $body]);
+        $comment->user()->associate($author);
+        $video->comments()->save($comment);
+
+        return $comment;
     }
 }

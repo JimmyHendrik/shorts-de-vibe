@@ -1,8 +1,11 @@
-const CACHE_NAME = 'vibe-shell-v3';
+const CACHE_NAME = 'vibe-shell-v4';
 const APP_SHELL = [
   './', './index.html', './style.css', './script.js', './ui-helpers.js',
   './api-client.js', './feed-client.js', './video-ui.js', './auth-form.js',
-  './demo-data.js', './comments-drag.js'
+  './demo-data.js', './comments-drag.js', './emoji-picker/init.js',
+  './emoji-picker/vendor/index.js', './emoji-picker/vendor/picker.js',
+  './emoji-picker/vendor/database.js', './emoji-picker/i18n/pt_BR.js',
+  './emoji-picker/pt-emojibase-data.json'
 ];
 
 self.addEventListener('install', event => {

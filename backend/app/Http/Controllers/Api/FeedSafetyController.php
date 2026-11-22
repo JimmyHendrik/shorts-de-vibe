@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Comment;
 use App\Models\HiddenUser;
 use App\Models\HiddenVideo;
 use App\Models\User;
@@ -54,5 +55,43 @@ class FeedSafetyController extends Controller
             VideoReport::where('video_id', $video->id)->where('status', 'pending')->update(['status' => 'review']);
         }
         return response()->json(['message' => 'Denúncia enviada para análise.']);
+    }
+
+    public function reportComment(Request $request, Comment $comment): JsonResponse
+    {
+        $comment->load('video');
+        $this->ensureVideoVisibleTo($request, $comment->video);
+        abort_unless(
+            (int) $comment->user_id !== (int) $request->user()->id,
+            422,
+            'Você não pode denunciar seu próprio comentário.',
+        );
+
+        $data = $request->validate([
+            'reason' => ['sometimes', Rule::in(['spam', 'hate', 'nudity', 'violence', 'copyright', 'other'])],
+        ]);
+        $report = VideoReport::firstOrCreate(
+            ['user_id' => $request->user()->id, 'comment_id' => $comment->id],
+            ['video_id' => $comment->video_id, 'reason' => $data['reason'] ?? 'other'],
+        );
+
+        $pendingReports = VideoReport::where('comment_id', $comment->id)
+            ->where('status', 'pending')
+            ->count();
+        if ($pendingReports >= 3) {
+            VideoReport::where('comment_id', $comment->id)
+                ->where('status', 'pending')
+                ->update(['status' => 'review']);
+        }
+
+        return response()->json([
+            'message' => 'Denúncia enviada para análise.',
+            'created' => $report->wasRecentlyCreated,
+        ], $report->wasRecentlyCreated ? 201 : 200);
+    }
+
+    private function ensureVideoVisibleTo(Request $request, Video $video): void
+    {
+        abort_unless($video->isVisibleTo($request->user('sanctum')), 404);
     }
 }

@@ -229,7 +229,7 @@ class VideoController extends Controller
             'duration_seconds' => ['nullable', 'integer', 'min:1', 'max:36000'],
             'visibility' => ['sometimes', Rule::in(['public', 'followers', 'private'])],
             'allow_comments' => ['sometimes', 'boolean'],
-            'scheduled_at' => ['nullable', 'date', 'after_or_equal:now'],
+            'scheduled_at' => ['nullable', 'date', 'after_or_equal:'.now()->subMinutes(10)->toDateTimeString()],
             'allow_reuse' => ['sometimes', 'boolean'],
             'is_ai_generated' => ['sometimes', 'boolean'],
             'age_restricted' => ['sometimes', 'boolean'],

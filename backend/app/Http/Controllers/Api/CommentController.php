@@ -9,6 +9,7 @@ use App\Models\Video;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use App\Models\Notification;
 use App\Models\User;
@@ -25,6 +26,7 @@ class CommentController extends Controller
             ->whereNull('parent_id')
             ->with('user')
             ->withCount('replies')
+            ->orderByDesc('pinned_at')
             ->latest()
             ->cursorPaginate($perPage);
 
@@ -87,6 +89,38 @@ class CommentController extends Controller
         $comment->load('user')->loadCount('replies');
 
         return (new CommentResource($comment))->response()->setStatusCode(201);
+    }
+
+    public function togglePin(Request $request, Comment $comment): CommentResource
+    {
+        $pinnedComment = DB::transaction(function () use ($request, $comment): Comment {
+            $video = Video::query()
+                ->whereKey($comment->video_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            abort_unless(
+                (int) $video->user_id === (int) $request->user()->id,
+                403,
+                'Somente o autor do vídeo pode fixar comentários.',
+            );
+
+            $lockedComment = Comment::query()
+                ->whereKey($comment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            abort_unless($lockedComment->parent_id === null, 422, 'Somente comentários principais podem ser fixados.');
+
+            if ($lockedComment->pinned_at !== null) {
+                $lockedComment->update(['pinned_at' => null]);
+            } else {
+                $video->comments()->whereNotNull('pinned_at')->update(['pinned_at' => null]);
+                $lockedComment->update(['pinned_at' => now()]);
+            }
+
+            return $lockedComment->load('user')->loadCount('replies');
+        });
+
+        return new CommentResource($pinnedComment);
     }
 
     public function update(Request $request, Comment $comment): CommentResource

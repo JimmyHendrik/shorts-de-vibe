@@ -50,8 +50,8 @@ class AppServiceProvider extends ServiceProvider
             $userId = (string) ($request->user()?->getAuthIdentifier() ?? $request->ip());
 
             return [
-                Limit::perMinute(3)->by('upload-minute:'.$userId),
-                Limit::perDay(20)->by('upload-day:'.$userId),
+                Limit::perMinute(app()->isLocal() ? 30 : 5)->by('upload-minute:'.$userId),
+                Limit::perDay(app()->isLocal() ? 100 : 30)->by('upload-day:'.$userId),
             ];
         });
         RateLimiter::for('upload-cleanup', fn (Request $request) => Limit::perMinute(10)->by((string) $request->user()->getAuthIdentifier()));

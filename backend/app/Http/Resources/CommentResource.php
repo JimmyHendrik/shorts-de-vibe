@@ -20,6 +20,7 @@ class CommentResource extends JsonResource
             'body' => $this->body,
             'parent_id' => $this->parent_id,
             'replies_count' => $this->replies_count ?? 0,
+            'is_pinned' => $this->pinned_at !== null,
             'author' => [
                 'id' => $this->user->id,
                 'name' => $this->user->name,

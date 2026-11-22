@@ -57,7 +57,7 @@ class CloudinaryVideoUploader
             'video_url' => $playbackUrl,
             'thumbnail_url' => $thumbnailUrl ?: $playbackUrl,
             'cloudinary_public_id' => $result['public_id'],
-            'duration_seconds' => isset($result['duration']) ? (int) round($result['duration']) : null,
+            'duration_seconds' => isset($result['duration']) ? max(1, (int) round($result['duration'])) : null,
         ];
     }
 

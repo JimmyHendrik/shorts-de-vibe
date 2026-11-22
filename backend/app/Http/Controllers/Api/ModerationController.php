@@ -18,7 +18,7 @@ class ModerationController extends Controller
     public function index(Request $request): JsonResponse
     {
         $this->ensureModerator($request);
-        return response()->json(['data' => VideoReport::with(['video.user', 'user'])->whereIn('status', ['pending', 'review'])->latest()->paginate(30)]);
+        return response()->json(['data' => VideoReport::with(['video.user', 'user', 'comment'])->whereIn('status', ['pending', 'review'])->latest()->paginate(30)]);
     }
 
     public function update(Request $request, VideoReport $report): JsonResponse

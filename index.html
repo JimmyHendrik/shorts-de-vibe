@@ -10,6 +10,8 @@
     <link rel="apple-touch-icon" href="img/favicon.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.css">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="vibe-design.css">
+    <link rel="stylesheet" href="vibe-glass.css">
     <title>Vibe — vídeos curtos</title>
 </head>
 
@@ -163,24 +165,31 @@
             <div class="comments-content">
 
                 <div class="comments-header">
-                    <span id="comments-title">Comentários</span>
+                    <span id="comments-title">Comentários (0)</span>
                     <button class="close-comments" type="button" aria-label="Fechar comentários">
                         <i class="ri-close-line"></i>
                     </button>
                 </div>
 
                 <button class="comments-notice" id="comments-notice" type="button" hidden></button>
-                <div class="comments-list">
+                <div class="comments-list" aria-live="polite">
                 </div>
 
-                <div class="comment-input">
-
-                    <input type="text" placeholder="Adicionar comentário">
-
-                    <button type="button" aria-label="Enviar comentário">
-                        <i class="ri-send-plane-fill"></i>
-                    </button>
-
+                <div class="comment-composer">
+                    <emoji-picker class="comment-emoji-picker dark" id="comment-emoji-picker" locale="pt"
+                        data-source="./emoji-picker/pt-emojibase-data.json" aria-label="Escolher emoji" hidden>
+                    </emoji-picker>
+                    <div class="comment-input">
+                        <button class="comment-emoji-button" type="button" aria-label="Adicionar emoji"
+                            aria-expanded="false" aria-controls="comment-emoji-picker">
+                            <i class="ri-emotion-happy-line" aria-hidden="true"></i>
+                        </button>
+                        <input type="text" placeholder="Adicionar comentário..." maxlength="1000"
+                            aria-label="Adicionar comentário">
+                        <button class="comment-send-button" type="button" aria-label="Enviar comentário">
+                            <i class="ri-send-plane-fill" aria-hidden="true"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -339,6 +348,7 @@
                         <span><strong id="profile-stat-average-views">0</strong> média de visualizações</span>
                     </div>
                 </section>
+                <p class="auth-error" id="profile-error" role="alert" hidden></p>
                 <form class="profile-form" id="profile-form" hidden>
                     <label>Nome<input id="profile-edit-name" name="name" maxlength="100"></label>
                     <label>Usuário<input id="profile-edit-username" name="username" maxlength="30"></label>
@@ -355,7 +365,6 @@
                             type="checkbox" checked> Permitir novos seguidores</label>
                     <label class="profile-check"><input id="profile-edit-comments" name="allow_comments" type="checkbox"
                             checked> Permitir comentários</label>
-                    <p class="auth-error" id="profile-error" role="alert" hidden></p>
                     <button class="auth-submit" type="submit">Salvar alterações</button>
                 </form>
                 <input id="profile-image-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
@@ -418,11 +427,11 @@
         <div class="crop-modal" id="crop-modal" aria-hidden="true">
             <section class="crop-content" role="dialog" aria-modal="true" aria-labelledby="crop-title">
                 <div class="profile-header">
-                    <h2 id="crop-title">Ajustar capa</h2><button class="close-crop" type="button"
+                    <h2 id="crop-title">Ajustar imagem</h2><button class="close-crop" type="button"
                         aria-label="Cancelar"><i class="ri-close-line"></i></button>
                 </div>
-                <p class="crop-help">Arraste a foto para escolher a área da capa.</p>
-                <div class="crop-preview"><img id="crop-image" alt="Prévia da capa" draggable="false">
+                <p class="crop-help">Arraste a imagem para escolher o enquadramento.</p>
+                <div class="crop-preview"><img id="crop-image" alt="Prévia da imagem" draggable="false">
                     <div class="crop-frame" aria-hidden="true"><span></span><span></span><span></span><span></span>
                     </div>
                 </div>
@@ -430,7 +439,7 @@
                 <input id="crop-x" type="hidden" value="50">
                 <input id="crop-y" type="hidden" value="50">
                 <div class="crop-actions"><button class="auth-toggle close-crop" type="button">Cancelar</button><button
-                        class="auth-submit" id="confirm-crop" type="button">Usar esta capa</button></div>
+                        class="auth-submit" id="confirm-crop" type="button">Usar esta imagem</button></div>
             </section>
         </div>
 
@@ -459,6 +468,7 @@
 
             <button class="footer-item" id="btnProfile" type="button" aria-label="Abrir conta">
                 <i class="ri-user-fill"></i>
+                <img class="profile-nav-avatar" id="profile-nav-avatar" alt="" hidden>
                 <span>Entrar</span>
             </button>
         </footer>
@@ -472,6 +482,7 @@
     <script src="video-ui.js"></script>
     <script src="ui-helpers.js"></script>
     <script src="auth-form.js"></script>
+    <script type="module" src="emoji-picker/init.js"></script>
     <script src="script.js?v=20261111"></script>
 </body>
 

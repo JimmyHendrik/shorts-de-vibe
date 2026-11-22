@@ -12,7 +12,7 @@ use App\Models\Comment;
 use App\Models\Favorite;
 use App\Models\Video;
 use App\Models\VideoLike;
-use RuntimeException;
+use Throwable;
 
 class ProfileController extends Controller
 {
@@ -129,9 +129,9 @@ class ProfileController extends Controller
         $user = $request->user();
         try {
             $url = $uploader->upload($data['image'], 'vibe-shorts/profiles/'.$user->id);
-        } catch (RuntimeException $exception) {
+        } catch (Throwable $exception) {
             report($exception);
-            return response()->json(['message' => 'Não foi possível enviar a imagem agora.'], 503);
+            return response()->json(['message' => 'Não foi possível enviar a imagem agora. Verifique a configuração do armazenamento e tente novamente.'], 503);
         }
 
         $field = $data['type'] === 'cover' ? 'cover_url' : 'avatar_url';

@@ -66,6 +66,8 @@ Route::middleware(['auth:sanctum', 'verified', 'throttle:verified-actions'])->gr
     Route::put('/videos/{video}/like', [VideoLikeController::class, 'store'])->middleware('idempotency');
     Route::delete('/videos/{video}/like', [VideoLikeController::class, 'destroy'])->middleware('idempotency');
     Route::post('/videos/{video}/comments', [CommentController::class, 'store'])->middleware('throttle:comments');
+    Route::patch('/comments/{comment}/pin', [CommentController::class, 'togglePin']);
+    Route::post('/comments/{comment}/report', [FeedSafetyController::class, 'reportComment'])->middleware('throttle:reports');
     Route::patch('/comments/{comment}', [CommentController::class, 'update']);
     Route::delete('/comments/{comment}', [CommentController::class, 'destroy']);
     Route::post('/videos/upload', [VideoUploadController::class, 'store'])->middleware('throttle:uploads');
