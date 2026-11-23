@@ -379,7 +379,7 @@ button.sidebar-icon {
 }
 .profile-modal:not(.viewing-other-profile) .profile-summary > div { padding-bottom: 4px; }
 .profile-modal:not(.viewing-other-profile) .profile-avatar-upload {
-    left: 68px;
+    left: 55px;
     bottom: 4px;
     width: 32px;
     height: 32px;
@@ -410,6 +410,23 @@ button.sidebar-icon {
 }
 .profile-actions .auth-toggle:hover { background: var(--brand-soft); border-color: transparent; }
 .profile-actions #profile-logout { color: var(--danger); }
+
+/* Perfil mobile: identidade abaixo da capa, sem sobrepor o banner. */
+@media (max-width: 768px) {
+    .profile-modal:not(.viewing-other-profile) .profile-summary,
+    .profile-modal.viewing-other-profile .profile-summary {
+        display: grid;
+        grid-template-columns: 82px minmax(0, 1fr);
+        grid-template-areas:
+            "avatar identity"
+            "stats stats";
+        align-items: start;
+        column-gap: 12px;
+        row-gap: 8px;
+        margin: 6px 0 0;
+        padding: 0;
+    }
+}
 
 /* Estatísticas em cartões compactos */
 .profile-analytics {
