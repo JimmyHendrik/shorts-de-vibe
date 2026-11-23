@@ -314,34 +314,48 @@
                             class="ri-close-line"></i></button>
                 </div>
                 <div class="profile-summary">
-                    <img id="profile-avatar" src="img/vibe-mark.png" alt="Avatar do perfil">
-                    <button class="profile-avatar-upload" id="profile-avatar-upload" type="button"
-                        aria-label="Alterar avatar"><i class="ri-camera-line"></i></button>
-                    <div>
-                        <h3 id="profile-name">Vibe</h3>
-                        <p id="profile-username">@vibe</p>
+                    <div class="profile-avatar-frame">
+                        <img id="profile-avatar" src="img/vibe-mark.png" alt="Avatar do perfil">
+                        <button class="profile-avatar-upload" id="profile-avatar-upload" type="button"
+                            aria-label="Alterar avatar"><i class="ri-camera-line"></i></button>
                     </div>
-                </div>
-                <div class="profile-stats">
-                    <span><strong id="profile-video-count">0</strong> vídeos</span>
-                    <span><strong id="profile-view-count">0</strong> visualizações</span>
-                    <button class="profile-stat" id="profile-followers"><strong id="profile-follower-count">0</strong>
-                        seguidores</button>
-                    <button class="profile-stat" id="profile-following"><strong id="profile-following-count">0</strong>
-                        seguindo</button>
+                    <div class="profile-identity">
+                        <div class="profile-name-row">
+                            <div>
+                                <h3 id="profile-name">Vibe</h3>
+                                <p id="profile-username">@vibe</p>
+                            </div>
+                            <button class="profile-settings" id="profile-settings" type="button" aria-label="Opções do perfil" aria-expanded="false" aria-controls="profile-settings-menu">
+                                <i class="ri-settings-3-line" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        <div class="profile-settings-menu" id="profile-settings-menu" hidden>
+                            <button id="profile-edit" type="button"><i class="ri-edit-line"></i>Editar perfil</button>
+                            <button id="profile-hidden-users" type="button"><i class="ri-user-forbid-line"></i>Usuários ocultados</button>
+                            <button id="profile-logout" type="button"><i class="ri-logout-box-r-line"></i>Sair da conta</button>
+                        </div>
+                    </div>
+                    <div class="profile-stats">
+                        <span><strong id="profile-video-count">0</strong> vídeos</span>
+                        <button class="profile-stat" id="profile-followers"><strong id="profile-follower-count">0</strong>
+                            seguidores</button>
+                        <button class="profile-stat" id="profile-following"><strong id="profile-following-count">0</strong>
+                            seguindo</button>
+                    </div>
                 </div>
                 <p class="profile-bio" id="profile-bio">Adicione uma descrição ao seu perfil.</p>
                 <div class="profile-actions">
-                    <button class="auth-submit" id="profile-edit" type="button">Editar perfil</button>
                     <button class="auth-submit" id="profile-follow" type="button" hidden>Seguir</button>
                     <button class="auth-toggle" id="profile-share" type="button">Compartilhar</button>
                     <button class="auth-toggle" id="profile-playlists" type="button">Playlists</button>
-                    <button class="auth-toggle" id="profile-hidden-users" type="button">Usuários ocultados</button>
-                    <button class="auth-toggle" id="profile-logout" type="button">Sair da conta</button>
                 </div>
                 <section class="profile-analytics" id="profile-analytics" aria-labelledby="profile-analytics-title">
-                    <h3 id="profile-analytics-title">Estatísticas</h3>
-                    <div class="profile-analytics-grid">
+                    <h3 class="profile-analytics-desktop-title" id="profile-analytics-title">Estatísticas</h3>
+                    <button class="profile-analytics-toggle" id="profile-analytics-toggle" type="button" aria-expanded="false" aria-controls="profile-analytics-grid">
+                        <span>📊 Ver estatísticas do canal</span><i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+                    </button>
+                    <div class="profile-analytics-grid" id="profile-analytics-grid">
+                        <span><strong id="profile-view-count">0</strong> visualizações</span>
                         <span><strong id="profile-stat-likes">0</strong> curtidas</span>
                         <span><strong id="profile-stat-comments">0</strong> comentários</span>
                         <span><strong id="profile-stat-shares">0</strong> compartilhamentos</span>

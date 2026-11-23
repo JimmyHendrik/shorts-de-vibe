@@ -202,3 +202,45 @@ button.sidebar-icon:hover { background: var(--glass-bg-hover); }
         }
     }
 }
+
+/* Controle de som: o efeito fica só no botão redondo */
+.audio-control,
+.audio-control:hover,
+.audio-control.expanded,
+.audio-control:focus-within {
+    padding: 0;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: none;
+}
+
+/* O ícone continua branco, porque agora não há fundo claro atrás dele */
+.audio-control:hover .audio-unlock,
+.audio-control.expanded .audio-unlock,
+.audio-control:focus-within .audio-unlock { color: #fff; }
+
+/* Caixa: aparência plana e separada visualmente do menu lateral. */
+@media (min-width: 900px) {
+    .notifications-modal {
+        width: 400px;
+        background: #f4f5f7;
+    }
+
+    .notifications-modal .notifications-content {
+        width: 100%;
+        border: 0;
+        border-radius: 0;
+        background: #f4f5f7;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        box-shadow: 14px 0 26px rgba(30, 35, 55, .12);
+        color: #1b1c26;
+    }
+}
+
+/* Reação ao passar o mouse, dentro do próprio círculo */
+.videos-container .audio-unlock:hover { background: rgba(255, 255, 255, .3); }
+
+.videos-container .audio-unlock:hover {
+    box-shadow: var(--glass-highlight), 0 4px 14px rgba(0, 0, 0, .35);
+}

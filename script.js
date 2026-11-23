@@ -553,9 +553,13 @@ const profileShare = document.getElementById('profile-share');
 const profilePlaylists = document.getElementById('profile-playlists');
 const profileHiddenUsers = document.getElementById('profile-hidden-users');
 const profileLogout = document.getElementById('profile-logout');
+const profileSettings = document.getElementById('profile-settings');
+const profileSettingsMenu = document.getElementById('profile-settings-menu');
 const profileForm = document.getElementById('profile-form');
 const profileError = document.getElementById('profile-error');
 const profileAnalytics = document.getElementById('profile-analytics');
+const profileAnalyticsToggle = document.getElementById('profile-analytics-toggle');
+const profileAnalyticsGrid = document.getElementById('profile-analytics-grid');
 const profileStatLikes = document.getElementById('profile-stat-likes');
 const profileStatComments = document.getElementById('profile-stat-comments');
 const profileStatShares = document.getElementById('profile-stat-shares');
@@ -854,6 +858,15 @@ async function voltarParaInicio({ randomize = false } = {}) {
     if (document.getElementById('top').classList.contains('profile-page-active')) fecharPerfil();
     if (searchMode) fecharPesquisa({ reloadFeed: false });
     await loadInitialFeed('discover', { randomize });
+
+    // Clicou em Início ou no logo: o primeiro vídeo já começa a tocar
+    const firstVideo = container.querySelector('video');
+    if (firstVideo) {
+        manuallyStartedVideos.add(firstVideo);
+        firstVideo.dataset.userRequested = 'true';
+        if (!audioUnlocked) unlockAudio(firstVideo);
+        playVideo(firstVideo);
+    }
 }
 
 function abrirFeedDePesquisa(items, selectedIndex = 0, { preserveOrder = false } = {}) {
@@ -1438,7 +1451,44 @@ profileVideoViewer.addEventListener('click', event => {
     if (event.target === profileVideoViewer) fecharVisualizadorVideoPerfil();
 });
 profileEdit.addEventListener('click', () => {
+    profileSettingsMenu.hidden = true;
+    profileSettings.setAttribute('aria-expanded', 'false');
     profileForm.hidden = !profileForm.hidden;
+});
+profileSettings.addEventListener('click', () => {
+    const isOpen = !profileSettingsMenu.hidden;
+    profileSettingsMenu.hidden = isOpen;
+    profileSettings.setAttribute('aria-expanded', String(!isOpen));
+});
+profileAnalyticsToggle.addEventListener('click', () => {
+    const isOpen = profileAnalytics.classList.toggle('expanded');
+    profileAnalyticsToggle.setAttribute('aria-expanded', String(isOpen));
+});
+document.addEventListener('click', event => {
+    if (!event.target.closest('.profile-identity')) {
+        profileSettingsMenu.hidden = true;
+        profileSettings.setAttribute('aria-expanded', 'false');
+    }
+    if (!event.target.closest('.profile-video-card')) {
+        document.querySelectorAll('.profile-video-mobile-menu').forEach(menu => {
+            menu.hidden = true;
+        });
+        document.querySelectorAll('.profile-video-menu-button').forEach(button => {
+            button.setAttribute('aria-expanded', 'false');
+        });
+    }
+});
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+        profileSettingsMenu.hidden = true;
+        profileSettings.setAttribute('aria-expanded', 'false');
+        document.querySelectorAll('.profile-video-mobile-menu').forEach(menu => {
+            menu.hidden = true;
+        });
+        document.querySelectorAll('.profile-video-menu-button').forEach(button => {
+            button.setAttribute('aria-expanded', 'false');
+        });
+    }
 });
 profileShare.addEventListener('click', compartilharPerfil);
 profilePlaylists.addEventListener('click', () => void abrirPlaylists());
@@ -2149,6 +2199,11 @@ function renderizarPerfil(data) {
     profileEdit.hidden = !viewingOwnProfile;
     profileLogout.hidden = !viewingOwnProfile;
     profileHiddenUsers.hidden = !viewingOwnProfile;
+    profileSettings.hidden = !viewingOwnProfile;
+    profileSettingsMenu.hidden = true;
+    profileSettings.setAttribute('aria-expanded', 'false');
+    profileAnalytics.classList.remove('expanded');
+    profileAnalyticsToggle.setAttribute('aria-expanded', 'false');
     profileAnalytics.hidden = !viewingOwnProfile;
     profileFollow.hidden = viewingOwnProfile;
     profileFollow.textContent = user.is_following ? 'Seguindo' : 'Seguir';
@@ -2204,13 +2259,58 @@ function renderizarPerfil(data) {
             pin.addEventListener('click', () => void alternarVideoFixado(videoData));
             actions.append(edit, remove, pin);
             card.appendChild(actions);
+
+            const menuButton = document.createElement('button');
+            menuButton.type = 'button';
+            menuButton.className = 'profile-video-menu-button';
+            menuButton.setAttribute('aria-label', 'Opções do vídeo');
+            menuButton.setAttribute('aria-expanded', 'false');
+            menuButton.textContent = '⋮';
+
+            const mobileMenu = document.createElement('div');
+            mobileMenu.className = 'profile-video-mobile-menu';
+            mobileMenu.hidden = true;
+            const mobilePin = pin.cloneNode(true);
+            mobilePin.textContent = videoData.pinned_at ? 'Desafixar do topo' : 'Fixar no topo';
+            mobilePin.addEventListener('click', () => void alternarVideoFixado(videoData));
+            const mobileEdit = edit.cloneNode(true);
+            mobileEdit.textContent = 'Editar';
+            mobileEdit.addEventListener('click', () => void editarVideoPerfil(videoData));
+            const mobileRemove = remove.cloneNode(true);
+            mobileRemove.textContent = 'Excluir';
+            mobileRemove.addEventListener('click', () => void excluirVideoPerfil(videoData));
+            mobileMenu.append(mobilePin, mobileEdit, mobileRemove);
+
+            menuButton.addEventListener('click', event => {
+                event.stopPropagation();
+                document.querySelectorAll('.profile-video-mobile-menu').forEach(menu => {
+                    if (menu !== mobileMenu) menu.hidden = true;
+                });
+                document.querySelectorAll('.profile-video-menu-button').forEach(button => {
+                    if (button !== menuButton) button.setAttribute('aria-expanded', 'false');
+                });
+                mobileMenu.hidden = !mobileMenu.hidden;
+                menuButton.setAttribute('aria-expanded', String(!mobileMenu.hidden));
+            });
+            card.append(menuButton, mobileMenu);
         }
         const meta = document.createElement('span');
         meta.className = 'profile-video-meta';
         const privacyLabel = videoData.visibility && videoData.visibility !== 'public' ? ' · privado' : '';
         const durationLabel = videoData.duration_seconds ? ` · ${formatTime(videoData.duration_seconds)}` : '';
         meta.textContent = `${formatCount(videoData.view_count)} visualizações · ${formatCount(videoData.likes_count)} curtidas · ${formatCount(videoData.comments_count)} comentários${durationLabel}${privacyLabel}`;
-        card.appendChild(meta);
+
+        const mobileOverlay = document.createElement('div');
+        mobileOverlay.className = 'profile-video-mobile-overlay';
+        const mobileViews = document.createElement('span');
+        mobileViews.className = 'profile-video-mobile-views';
+        mobileViews.textContent = `▶ ${formatCount(videoData.view_count)}`;
+        const mobileDuration = document.createElement('span');
+        mobileDuration.className = 'profile-video-mobile-duration';
+        mobileDuration.textContent = formatTime(videoData.duration_seconds || 0);
+        mobileOverlay.append(mobileViews, mobileDuration);
+
+        card.append(meta, mobileOverlay);
         profileVideos.appendChild(card);
     });
 }
