@@ -107,6 +107,8 @@ button.sidebar-icon:hover { background: var(--glass-bg-hover); }
 /* ---------- 5. Janelas (modais) ---------- */
 .auth-modal,
 .simple-modal,
+.legal-modal,
+.direct-messages-modal,
 .interests-modal,
 .crop-modal,
 .video-options-modal,
@@ -114,10 +116,10 @@ button.sidebar-icon:hover { background: var(--glass-bg-hover); }
 
 .notifications-content,
 .simple-modal-content,
+.direct-messages-content,
 .auth-content,
 .crop-content,
 .interests-content,
-.publish-content,
 .video-options-content,
 .profile-image-viewer-content,
 .welcome-card {
@@ -243,4 +245,173 @@ button.sidebar-icon:hover { background: var(--glass-bg-hover); }
 
 .videos-container .audio-unlock:hover {
     box-shadow: var(--glass-highlight), 0 4px 14px rgba(0, 0, 0, .35);
+}
+/* =========================================================
+   PASSO 3: MODAL DE PUBLICAÇÃO (LIQUID GLASS + DARK MODE)
+   ========================================================= */
+
+/* 1. Container principal em vidro líquido (Tema Escuro - padrão) */
+.publish-modal .publish-content {
+  background: rgba(18, 22, 33, 0.78) !important;
+  backdrop-filter: blur(26px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  color: #f8fafc !important;
+}
+
+/* 2. Coluna esquerda (Preview) e direita (Formulário) */
+.publish-modal .publish-left-pane {
+  background: rgba(10, 13, 22, 0.55) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.publish-modal .publish-right-pane,
+.publish-modal .publish-right-header,
+.publish-modal .publish-footer {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #f8fafc !important;
+}
+
+/* 3. Textos, labels e títulos internos */
+.publish-modal .publish-title,
+.publish-modal .publish-block-label,
+.publish-modal .publish-step-title,
+.publish-modal label,
+.publish-modal h2,
+.publish-modal h3 {
+  color: #f1f5f9 !important;
+}
+
+.publish-modal .publish-subtitle,
+.publish-modal .publish-hint,
+.publish-modal .char-counter {
+  color: #94a3b8 !important;
+}
+
+/* 4. Inputs, textarea, select e campo de localização */
+.publish-modal input[type="text"],
+.publish-modal input[type="datetime-local"],
+.publish-modal textarea,
+.publish-modal select,
+.publish-modal .publish-location {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: #f8fafc !important;
+}
+
+.publish-modal input::placeholder,
+.publish-modal textarea::placeholder {
+  color: rgba(203, 213, 225, 0.5) !important;
+}
+
+.publish-modal input:focus,
+.publish-modal textarea:focus,
+.publish-modal select:focus {
+  border-color: #fe2c55 !important;
+  background: rgba(255, 255, 255, 0.09) !important;
+  outline: none !important;
+}
+
+/* 5. Botão GPS e Dropdown do Google Places */
+.publish-modal .publish-location-gps {
+  color: #cbd5e1 !important;
+}
+
+.publish-modal .publish-location-gps:hover {
+  color: #fe2c55 !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.publish-modal .publish-location-dropdown {
+  background: rgba(20, 25, 38, 0.94) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55) !important;
+  color: #f1f5f9 !important;
+}
+
+.publish-modal .publish-location-dropdown li:hover {
+  background: rgba(254, 44, 85, 0.18) !important;
+}
+
+/* 6. Área de upload / dropzone e botões secundários */
+.publish-modal .upload-dropzone,
+.publish-modal .publish-card,
+.publish-modal .publish-option-card {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  color: #f1f5f9 !important;
+}
+
+.publish-modal .close-publish {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+/* 7. Tema Claro (Liquid Glass Translúcido) */
+@media (prefers-color-scheme: light) {
+  .publish-modal .publish-content {
+    background: rgba(255, 255, 255, 0.82) !important;
+    border: 1px solid rgba(255, 255, 255, 0.7) !important;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+    color: #0f172a !important;
+  }
+
+  .publish-modal .publish-left-pane {
+    background: rgba(241, 245, 249, 0.65) !important;
+    border-right: 1px solid rgba(15, 23, 42, 0.08) !important;
+  }
+
+  .publish-modal .publish-title,
+  .publish-modal .publish-block-label,
+  .publish-modal .publish-step-title,
+  .publish-modal label,
+  .publish-modal h2,
+  .publish-modal h3 {
+    color: #0f172a !important;
+  }
+
+  .publish-modal .publish-subtitle,
+  .publish-modal .publish-hint,
+  .publish-modal .char-counter {
+    color: #475569 !important;
+  }
+
+  .publish-modal input[type="text"],
+  .publish-modal input[type="datetime-local"],
+  .publish-modal textarea,
+  .publish-modal select,
+  .publish-modal .publish-location {
+    background: rgba(255, 255, 255, 0.75) !important;
+    border: 1px solid rgba(15, 23, 42, 0.14) !important;
+    color: #0f172a !important;
+  }
+
+  .publish-modal .publish-location-dropdown {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(15, 23, 42, 0.12) !important;
+    color: #0f172a !important;
+  }
+
+  .publish-modal .close-publish {
+    background: rgba(15, 23, 42, 0.06) !important;
+    color: #0f172a !important;
+    border: 1px solid rgba(15, 23, 42, 0.1) !important;
+  }
+}
+
+/* 8. Remove o botão fechar duplicado no mobile (<= 860px) */
+@media (max-width: 860px) {
+  .publish-modal .publish-left-pane {
+    border-right: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .publish-modal .publish-right-header .close-publish {
+    display: none !important;
+  }
 }

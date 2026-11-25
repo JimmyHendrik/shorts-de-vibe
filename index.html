@@ -5,7 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0b0b10">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' data: https://cdnjs.cloudflare.com; img-src 'self' data: blob: https://res.cloudinary.com; media-src 'self' blob: https://res.cloudinary.com; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 https:; worker-src 'self'">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' https://maps.googleapis.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com https://cdn.jsdelivr.net data:; img-src 'self' data: blob: https://*.cloudinary.com https://maps.gstatic.com https://maps.googleapis.com; media-src 'self' blob: https://*.cloudinary.com; connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 https://api.cloudinary.com https://maps.googleapis.com https://places.googleapis.com;">
     <link rel="icon" type="image/png" href="img/favicon.png">
     <link rel="apple-touch-icon" href="img/favicon.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.css">
@@ -15,7 +16,7 @@
     <title>Vibe — vídeos curtos</title>
 </head>
 
-<body data-api-base-url="" data-demo-fallback="false">
+<body data-api-base-url="" data-demo-fallback="false" data-google-maps-api-key="">
     <!--header/cabeçalho-->
     <div class="app-container" id="top">
         <section class="welcome-gate" id="welcome-gate" aria-labelledby="welcome-title" hidden>
@@ -60,7 +61,8 @@
                 <button type="button" data-search-filter="videos">Vídeos</button>
                 <button type="button" data-search-filter="users">Usuários</button>
             </nav>
-            <section class="discover-suggestions" id="discover-suggestions" aria-labelledby="discover-suggestions-title" hidden>
+            <section class="discover-suggestions" id="discover-suggestions" aria-labelledby="discover-suggestions-title"
+                hidden>
                 <div class="discover-suggestions-heading">
                     <h2 id="discover-suggestions-title">Pessoas para seguir</h2>
                     <button type="button" id="discover-suggestions-refresh">Atualizar</button>
@@ -88,75 +90,264 @@
 
         <div class="publish-modal" id="publish-modal" aria-hidden="true">
             <section class="publish-content" role="dialog" aria-modal="true" aria-labelledby="publish-title">
-                <div class="profile-header">
-                    <h2 id="publish-title">Adicionar vídeo</h2><button class="close-publish" type="button"
-                        aria-label="Fechar"><i class="ri-close-line"></i></button>
-                </div>
-                <p id="publish-status">Escolha uma opção para publicar no Vibe.</p>
+                <!-- ETAPA 1: Seleção / Gravação (Fiel à Imagem 2) -->
                 <div class="publish-actions">
-                    <button id="publish-file" type="button"><i class="ri-upload-2-line"></i><span>Enviar
-                            vídeo</span></button>
-                    <button id="publish-record" type="button"><i class="ri-camera-3-line"></i><span>Gravar
-                            agora</span></button>
+                    <div class="publish-actions-header">
+                        <h2 id="publish-title" class="publish-modal-title">Adicionar vídeo</h2>
+                        <button class="close-publish" type="button" aria-label="Fechar"><i
+                                class="ri-close-line"></i></button>
+                    </div>
+
+                    <div class="publish-dropzone" id="publish-dropzone" role="button" tabindex="0"
+                        aria-label="Arraste seu vídeo aqui ou escolha uma opção">
+                        <div class="publish-dropzone-cloud">
+                            <svg width="68" height="52" viewBox="0 0 68 52" fill="none"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <defs>
+                                    <linearGradient id="cloudGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#19d5ff" />
+                                        <stop offset="50%" stop-color="#258bff" />
+                                        <stop offset="100%" stop-color="#5b5cff" />
+                                    </linearGradient>
+                                </defs>
+                                <path
+                                    d="M51 22C50.2 12.1 42 4 32 4C24.2 4 17.5 8.9 14.8 16C6.5 17.3 0 24.4 0 33C0 42.4 7.6 50 17 50H50C59.9 50 68 41.9 68 32C68 22.8 61 15.2 52 14.2C51.7 16.8 51.3 19.4 51 22Z"
+                                    fill="url(#cloudGrad)" />
+                                <path d="M34 20L25 29H31V41H37V29H43L34 20Z" fill="white" />
+                            </svg>
+                        </div>
+                        <p class="publish-dropzone-title">Arraste seu vídeo aqui ou escolha uma opção</p>
+                    </div>
+
+                    <div class="publish-action-buttons">
+                        <button id="publish-file" class="publish-btn-upload" type="button">
+                            <i class="ri-upload-2-line"></i>
+                            <span>Enviar vídeo</span>
+                        </button>
+                        <button id="publish-record" class="publish-btn-record" type="button">
+                            <i class="ri-camera-3-line"></i>
+                            <span>Gravar agora</span>
+                        </button>
+                    </div>
+
+                    <p class="publish-specs-text">MP4, WebM • 9:16 • Alta qualidade</p>
+
+                    <div class="publish-recording-box">
+                        <video id="publish-preview" class="publish-preview-cam" playsinline muted hidden></video>
+                        <button id="publish-stop" class="publish-stop" type="button" hidden>
+                            <i class="ri-stop-circle-fill"></i> Parar gravação
+                        </button>
+                    </div>
                 </div>
-                <video id="publish-preview" playsinline muted hidden></video>
-                <button id="publish-stop" class="publish-stop" type="button" hidden>Parar gravação</button>
+
+                <!-- ETAPA 2: Editor em 2 Colunas (Fiel à Imagem 1) -->
                 <div class="publish-editor" id="publish-editor" hidden>
-                    <video id="publish-detail-preview" class="publish-detail-preview" playsinline muted
-                        controls></video>
-                    <div class="publish-cover-picker">
-                        <label for="publish-cover-range">Capa do vídeo</label>
-                        <canvas id="publish-cover-canvas" width="320" height="180" aria-label="Prévia da capa"></canvas>
-                        <input id="publish-cover-range" type="range" min="0" max="0" step="0.1" value="0"
-                            aria-label="Escolher momento da capa">
+                    <!-- Coluna Esquerda: Preview, Cortar e Capa -->
+                    <div class="publish-col-left">
+                        <div class="publish-col-header">
+                            <div>
+                                <h2 class="publish-col-title">Adicionar vídeo</h2>
+                                <p id="publish-status" class="publish-col-subtitle">Revise os detalhes antes de
+                                    publicar.</p>
+                            </div>
+                            <button class="close-publish" type="button" aria-label="Fechar"><i
+                                    class="ri-close-line"></i></button>
+                        </div>
+
+                        <!-- Player de Vídeo Proporcional -->
+                        <div class="publish-video-card">
+                            <div class="publish-video-player-box">
+                                <video id="publish-detail-preview" class="publish-detail-preview" playsinline muted
+                                    controls></video>
+                            </div>
+                        </div>
+
+                        <!-- Cortar video -->
+                        <div class="publish-trim-section">
+                            <label class="publish-block-label">Cortar video</label>
+                            <div class="publish-trim-grid" style="display:none;">
+                                <label>Início (s)<input id="publish-trim-start" type="number" min="0" step="0.1"
+                                        value="0"></label>
+                                <label>Fim (s)<input id="publish-trim-end" type="number" min="0" step="0.1"
+                                        value="0"></label>
+                            </div>
+                            <div class="publish-trim-timeline" id="publish-trim-timeline">
+                                <video id="publish-trim-video" muted playsinline preload="metadata"
+                                    aria-label="Prévia do corte"></video>
+                                <canvas id="publish-trim-strip" class="publish-trim-strip" width="640" height="76"
+                                    aria-hidden="true"></canvas>
+                                <div class="publish-trim-selection" id="publish-trim-selection"></div>
+                                <input id="publish-trim-start-range" type="range" min="0" max="0" step="0.1" value="0"
+                                    aria-label="Início do corte">
+                                <input id="publish-trim-end-range" type="range" min="0" max="0" step="0.1" value="0"
+                                    aria-label="Fim do corte">
+                            </div>
+                            <div class="publish-trim-ticks" id="publish-trim-ticks">
+                                <span>00:00</span><span>00:05</span><span>00:10</span><span>00:15</span><span>00:20</span><span>00:25</span><span>00:30</span><span>00:35</span>
+                            </div>
+                        </div>
+
+                        <!-- Capa do vídeo -->
+                        <div class="publish-cover-section">
+                            <label class="publish-block-label">Capa do vídeo</label>
+                            <div class="publish-cover-layout">
+                                <div class="publish-cover-thumb-container">
+                                    <canvas id="publish-cover-canvas" width="180" height="320"
+                                        aria-label="Prévia da capa"></canvas>
+                                </div>
+                                <div class="publish-cover-slider-col">
+                                    <input id="publish-cover-range" class="publish-cover-slider" type="range" min="0"
+                                        max="0" step="0.1" value="0" aria-label="Escolher momento da capa">
+                                    <div class="publish-cover-time-display" id="publish-trim-time">00:00 – 00:35</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="publish-trim-grid">
-                        <label>Início (s)<input id="publish-trim-start" type="number" min="0" step="0.1"
-                                value="0"></label>
-                        <label>Fim (s)<input id="publish-trim-end" type="number" min="0" step="0.1" value="0"></label>
-                    </div>
-                    <div class="publish-trim-time" id="publish-trim-time">0:00 – 0:00</div>
-                    <div class="publish-trim-timeline" id="publish-trim-timeline">
-                        <video id="publish-trim-video" muted playsinline preload="metadata" aria-label="Prévia do corte"></video>
-                        <canvas id="publish-trim-strip" class="publish-trim-strip" width="640" height="76" aria-hidden="true"></canvas>
-                        <div class="publish-trim-selection" id="publish-trim-selection"></div>
-                        <input id="publish-trim-start-range" type="range" min="0" max="0" step="0.1" value="0" aria-label="Início do corte">
-                        <input id="publish-trim-end-range" type="range" min="0" max="0" step="0.1" value="0" aria-label="Fim do corte">
-                    </div>
-                    <label class="publish-description-label" for="publish-description">Descrição</label>
-                    <textarea id="publish-description" maxlength="1000"
-                        placeholder="Escreva uma descrição, use #hashtags e @menções"></textarea>
-                    <div class="publish-description-count" id="publish-description-count">0/1000 · # 0/10</div>
-                    <label for="publish-location">Localização (opcional)</label>
-                    <input id="publish-location" class="publish-location" type="text" maxlength="120"
-                        placeholder="Adicionar localização">
-                    <label for="publish-visibility">Quem pode ver esta publicação</label>
-                    <select id="publish-visibility">
-                        <option value="public">Todos</option>
-                        <option value="followers">Seguidores</option>
-                        <option value="private">Somente eu</option>
-                    </select>
-                    <label for="publish-schedule">Agendar publicação (opcional)</label>
-                    <input id="publish-schedule" class="publish-location" type="datetime-local">
-                    <label class="publish-check"><input id="publish-allow-comments" type="checkbox" checked> Permitir
-                        comentários</label>
-                    <label class="publish-check"><input id="publish-allow-reuse" type="checkbox" checked> Permitir
-                        reutilização do conteúdo</label>
-                    <label class="publish-check"><input id="publish-ai-generated" type="checkbox"> Conteúdo gerado por
-                        IA</label>
-                    <label class="publish-check"><input id="publish-age-restricted" type="checkbox"> Restringir para
-                        maiores de 18 anos</label>
-                    <label class="publish-check"><input id="publish-high-quality" type="checkbox" checked> Priorizar
-                        publicação em alta qualidade</label>
-                    <div class="publish-editor-actions">
-                        <button id="publish-back" type="button">Voltar</button>
-                        <button id="publish-submit" type="button">Publicar agora</button>
-                    </div>
-                    <div class="publish-progress" id="publish-progress" hidden aria-live="polite">
-                        <div class="publish-progress-circle" id="publish-progress-circle"><span id="publish-progress-value">0%</span></div>
-                        <p id="publish-progress-label">Enviando vídeo…</p>
+
+                    <!-- Coluna Direita: Formulário, Toggles e Ações -->
+                    <div class="publish-col-right">
+                        <div class="publish-right-header">
+                            <button class="close-publish" type="button" aria-label="Fechar"><i
+                                    class="ri-close-line"></i></button>
+                        </div>
+
+                        <!-- Descrição -->
+                        <div class="publish-field-group">
+                            <div class="publish-field-top">
+                                <label class="publish-block-label" for="publish-description">Descrição</label>
+                                <span class="publish-description-count" id="publish-description-count"
+                                    style="display:none;">0/1000 · # 0/10</span>
+                            </div>
+                            <textarea id="publish-description" maxlength="1000" rows="3"
+                                placeholder="Escreva uma descrição, use #hashtags e @menções..."></textarea>
+                            <div class="publish-pills-row">
+                                <button type="button" class="publish-pill" id="publish-btn-hashtag"
+                                    aria-label="Adicionar hashtag">+ #hashtag</button>
+                                <button type="button" class="publish-pill" id="publish-btn-mention"
+                                    aria-label="Adicionar menção">+ @menção</button>
+                            </div>
+                        </div>
+
+                        <!-- Localização -->
+                        <div class="publish-field-group">
+                            <label class="publish-block-label" for="publish-location">Localização (opcional)</label>
+                            <div class="publish-location-field">
+                                <div class="publish-input-with-icon">
+                                    <i class="ri-search-line publish-input-icon" aria-hidden="true"></i>
+                                    <input id="publish-location" class="publish-location" type="text" maxlength="120"
+                                        placeholder="Adicionar localização..." autocomplete="off">
+                                    <button type="button" id="publish-location-gps" class="publish-location-gps"
+                                        title="Usar minha localização atual" aria-label="Usar minha localização atual">
+                                        <i class="ri-crosshair-2-line" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                <ul id="publish-location-dropdown" class="publish-location-dropdown" hidden></ul>
+                            </div>
+                        </div>
+
+                        <!-- Quem pode ver -->
+                        <div class="publish-field-group">
+                            <label class="publish-block-label" for="publish-visibility">Quem pode ver esta
+                                publicação</label>
+                            <div class="publish-select-wrapper">
+                                <select id="publish-visibility">
+                                    <option value="public">Todos</option>
+                                    <option value="followers">Seguidores</option>
+                                    <option value="private">Somente eu</option>
+                                </select>
+                                <i class="ri-arrow-down-s-line publish-select-arrow"></i>
+                            </div>
+                        </div>
+
+                        <!-- Agendar publicação -->
+                        <div class="publish-field-group">
+                            <label class="publish-block-label" for="publish-schedule">Agendar publicação
+                                (opcional)</label>
+                            <div class="publish-input-with-icon">
+                                <input id="publish-schedule" class="publish-location publish-date-input"
+                                    type="datetime-local" placeholder="dd/mm/aaaa --:--">
+                                <i class="ri-calendar-line publish-date-icon"></i>
+                            </div>
+                        </div>
+
+                        <!-- Painel de Toggles -->
+                        <div class="publish-toggles-card">
+                            <label class="publish-toggle-item" for="publish-allow-comments">
+                                <span class="publish-toggle-title">Permitir comentários</span>
+                                <div class="publish-switch">
+                                    <input id="publish-allow-comments" type="checkbox" checked>
+                                    <span class="publish-slider"></span>
+                                </div>
+                            </label>
+
+                            <label class="publish-toggle-item" for="publish-allow-reuse">
+                                <span class="publish-toggle-title">Permitir reutilização do conteúdo</span>
+                                <div class="publish-switch">
+                                    <input id="publish-allow-reuse" type="checkbox" checked>
+                                    <span class="publish-slider"></span>
+                                </div>
+                            </label>
+
+                            <label class="publish-toggle-item" for="publish-ai-generated">
+                                <span class="publish-toggle-title">Conteúdo gerado por IA</span>
+                                <div class="publish-switch">
+                                    <input id="publish-ai-generated" type="checkbox">
+                                    <span class="publish-slider"></span>
+                                </div>
+                            </label>
+
+                            <label class="publish-toggle-item" for="publish-age-restricted">
+                                <span class="publish-toggle-title">Restringir para maiores de 18 anos</span>
+                                <div class="publish-switch">
+                                    <input id="publish-age-restricted" type="checkbox">
+                                    <span class="publish-slider"></span>
+                                </div>
+                            </label>
+
+                            <label class="publish-toggle-item" for="publish-high-quality">
+                                <span class="publish-toggle-title">Priorizar publicação em alta qualidade</span>
+                                <div class="publish-switch">
+                                    <input id="publish-high-quality" type="checkbox" checked>
+                                    <span class="publish-slider"></span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <!-- Rodapé de Ações -->
+                        <div class="publish-footer-actions">
+                            <button id="publish-back" class="publish-btn-cancel" type="button">Voltar</button>
+                            <button id="publish-submit" class="publish-btn-primary" type="button">Publicar
+                                agora</button>
+                        </div>
                     </div>
                 </div>
+
+                <!-- Progresso de envio -->
+                <div class="publish-progress" id="publish-progress" hidden aria-live="polite">
+                    <div class="publish-progress-circle" id="publish-progress-circle"><span
+                            id="publish-progress-value">0%</span></div>
+                    <p id="publish-progress-label">Enviando vídeo…</p>
+                </div>
+            </section>
+        </div>
+
+        <div class="simple-modal direct-messages-modal" id="directMessagesModal" aria-hidden="true">
+            <section class="simple-modal-content direct-messages-content" role="dialog" aria-modal="true"
+                aria-labelledby="directMessagesTitle">
+                <div class="profile-header">
+                    <h2 id="directMessagesTitle">Mensagens</h2>
+                    <button class="close-direct-messages" type="button" aria-label="Fechar mensagens">
+                        <i class="ri-close-line"></i>
+                    </button>
+                </div>
+                <p class="direct-messages-status" id="directMessagesStatus" role="status" aria-live="polite"></p>
+                <div class="direct-messages-list" id="directMessagesList" aria-live="polite"></div>
+                <form class="direct-message-form" id="directMessageForm">
+                    <label class="visually-hidden" for="directMessageInput">Nova mensagem</label>
+                    <textarea id="directMessageInput" name="body" maxlength="2000" rows="2"
+                        placeholder="Escreva uma mensagem..." required></textarea>
+                    <button class="auth-submit" type="submit" id="directMessageSend">Enviar</button>
+                </form>
             </section>
         </div>
 
@@ -196,10 +387,14 @@
         </div>
 
         <div class="video-options-modal" id="video-options-modal" aria-hidden="true">
-            <section class="video-options-content" role="dialog" aria-modal="true" aria-labelledby="video-options-title">
-                <div class="comments-header"><strong id="video-options-title">Opções do vídeo</strong><button class="close-video-options" type="button" aria-label="Fechar opções">×</button></div>
-                <button type="button" data-video-option="download"><i class="ri-download-2-line"></i> Baixar vídeo</button>
-                <button type="button" data-video-option="playlist"><i class="ri-play-list-add-line"></i> Adicionar à playlist</button>
+            <section class="video-options-content" role="dialog" aria-modal="true"
+                aria-labelledby="video-options-title">
+                <div class="comments-header"><strong id="video-options-title">Opções do vídeo</strong><button
+                        class="close-video-options" type="button" aria-label="Fechar opções">×</button></div>
+                <button type="button" data-video-option="download"><i class="ri-download-2-line"></i> Baixar
+                    vídeo</button>
+                <button type="button" data-video-option="playlist"><i class="ri-play-list-add-line"></i> Adicionar à
+                    playlist</button>
                 <button type="button" data-video-option="copy">Copiar link</button>
                 <button type="button" data-video-option="hide">Não tenho interesse</button>
                 <button type="button" data-video-option="user">Ocultar vídeos deste usuário</button>
@@ -243,7 +438,8 @@
                             <input id="auth-password" name="password" type="password" autocomplete="current-password"
                                 minlength="8" required>
                             <button class="password-toggle" type="button" data-password-toggle="auth-password"
-                                aria-label="Mostrar senha" aria-pressed="false"><i class="ri-eye-line" aria-hidden="true"></i></button>
+                                aria-label="Mostrar senha" aria-pressed="false"><i class="ri-eye-line"
+                                    aria-hidden="true"></i></button>
                         </span>
                     </label>
 
@@ -252,8 +448,10 @@
                         <span class="password-input-wrap">
                             <input id="auth-password-confirmation" name="password_confirmation" type="password"
                                 autocomplete="new-password" minlength="8">
-                            <button class="password-toggle" type="button" data-password-toggle="auth-password-confirmation"
-                                aria-label="Mostrar confirmação de senha" aria-pressed="false"><i class="ri-eye-line" aria-hidden="true"></i></button>
+                            <button class="password-toggle" type="button"
+                                data-password-toggle="auth-password-confirmation"
+                                aria-label="Mostrar confirmação de senha" aria-pressed="false"><i class="ri-eye-line"
+                                    aria-hidden="true"></i></button>
                         </span>
                     </label>
 
@@ -261,12 +459,37 @@
                     <button class="auth-submit" id="auth-submit" type="submit">Entrar</button>
                     <div class="auth-divider"><span>ou</span></div>
                     <button class="auth-google-btn" id="auth-google-btn" type="button">
-                        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/></svg>
+                        <svg width="18" height="18" viewBox="0 0 24 24">
+                            <path fill="#4285F4"
+                                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" />
+                            <path fill="#34A853"
+                                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z" />
+                            <path fill="#FBBC05"
+                                d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+                            <path fill="#EA4335"
+                                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
+                        </svg>
                         <span>Continuar com o Google</span>
                     </button>
                     <button class="auth-toggle auth-forgot" id="auth-forgot" type="button">Esqueci minha senha</button>
                     <button class="auth-toggle" id="auth-toggle" type="button">Criar uma conta</button>
+                    <p class="auth-legal-links">
+                        Ao continuar, você aceita nossos
+                        <button class="auth-legal-link" type="button" data-legal-document="terms">Termos de Uso</button>
+                        e
+                        <button class="auth-legal-link" type="button" data-legal-document="privacy">Política de Privacidade</button>.
+                    </p>
                 </form>
+            </section>
+        </div>
+
+        <div class="simple-modal legal-modal" id="legal-modal" aria-hidden="true">
+            <section class="simple-modal-content" role="dialog" aria-modal="true" aria-labelledby="legal-title">
+                <div class="profile-header">
+                    <h2 id="legal-title">Informações legais</h2>
+                    <button class="close-legal" type="button" aria-label="Fechar"><i class="ri-close-line"></i></button>
+                </div>
+                <div id="legal-content" class="legal-content"></div>
             </section>
         </div>
 
@@ -295,7 +518,8 @@
                     <button class="notification-tab active" id="notifications-tab-all" type="button">Todas</button>
                     <button class="notification-tab" id="notifications-tab-mentions" type="button">Menções</button>
                     <button class="notification-tab" id="notifications-tab-history" type="button">Histórico</button>
-                    <button class="notification-tab" id="notifications-tab-moderation" type="button" hidden>Moderação</button>
+                    <button class="notification-tab" id="notifications-tab-moderation" type="button"
+                        hidden>Moderação</button>
                 </div>
                 <div class="notifications-list" id="notifications-list">
                     <p class="notifications-empty">Suas notificações aparecerão aqui.</p>
@@ -325,33 +549,41 @@
                                 <h3 id="profile-name">Vibe</h3>
                                 <p id="profile-username">@vibe</p>
                             </div>
-                            <button class="profile-settings" id="profile-settings" type="button" aria-label="Opções do perfil" aria-expanded="false" aria-controls="profile-settings-menu">
+                            <button class="profile-settings" id="profile-settings" type="button"
+                                aria-label="Opções do perfil" aria-expanded="false"
+                                aria-controls="profile-settings-menu">
                                 <i class="ri-settings-3-line" aria-hidden="true"></i>
                             </button>
                         </div>
                         <div class="profile-settings-menu" id="profile-settings-menu" hidden>
                             <button id="profile-edit" type="button"><i class="ri-edit-line"></i>Editar perfil</button>
-                            <button id="profile-hidden-users" type="button"><i class="ri-user-forbid-line"></i>Usuários ocultados</button>
-                            <button id="profile-logout" type="button"><i class="ri-logout-box-r-line"></i>Sair da conta</button>
+                            <button id="profile-hidden-users" type="button"><i class="ri-user-forbid-line"></i>Usuários
+                                ocultados</button>
+                            <button id="profile-logout" type="button"><i class="ri-logout-box-r-line"></i>Sair da
+                                conta</button>
                         </div>
                     </div>
                     <div class="profile-stats">
                         <span><strong id="profile-video-count">0</strong> vídeos</span>
-                        <button class="profile-stat" id="profile-followers"><strong id="profile-follower-count">0</strong>
+                        <button class="profile-stat" id="profile-followers"><strong
+                                id="profile-follower-count">0</strong>
                             seguidores</button>
-                        <button class="profile-stat" id="profile-following"><strong id="profile-following-count">0</strong>
+                        <button class="profile-stat" id="profile-following"><strong
+                                id="profile-following-count">0</strong>
                             seguindo</button>
                     </div>
                 </div>
                 <p class="profile-bio" id="profile-bio">Adicione uma descrição ao seu perfil.</p>
                 <div class="profile-actions">
                     <button class="auth-submit" id="profile-follow" type="button" hidden>Seguir</button>
+                    <button class="auth-toggle" id="profileMessageBtn" type="button" hidden>Mensagem</button>
                     <button class="auth-toggle" id="profile-share" type="button">Compartilhar</button>
                     <button class="auth-toggle" id="profile-playlists" type="button">Playlists</button>
                 </div>
                 <section class="profile-analytics" id="profile-analytics" aria-labelledby="profile-analytics-title">
                     <h3 class="profile-analytics-desktop-title" id="profile-analytics-title">Estatísticas</h3>
-                    <button class="profile-analytics-toggle" id="profile-analytics-toggle" type="button" aria-expanded="false" aria-controls="profile-analytics-grid">
+                    <button class="profile-analytics-toggle" id="profile-analytics-toggle" type="button"
+                        aria-expanded="false" aria-controls="profile-analytics-grid">
                         <span>📊 Ver estatísticas do canal</span><i class="ri-arrow-down-s-line" aria-hidden="true"></i>
                     </button>
                     <div class="profile-analytics-grid" id="profile-analytics-grid">
@@ -364,6 +596,8 @@
                 </section>
                 <p class="auth-error" id="profile-error" role="alert" hidden></p>
                 <form class="profile-form" id="profile-form" hidden>
+                    <img class="profile-edit-avatar-preview" id="editProfileAvatarImg" src="img/vibe-mark.png"
+                        alt="Prévia do avatar do perfil">
                     <label>Nome<input id="profile-edit-name" name="name" maxlength="100"></label>
                     <label>Usuário<input id="profile-edit-username" name="username" maxlength="30"></label>
                     <label>Biografia<textarea id="profile-edit-bio" name="bio" maxlength="500"></textarea></label>
@@ -387,8 +621,8 @@
                         aria-selected="true">Vídeos</button>
                     <button class="profile-tab" type="button" data-profile-tab="liked" role="tab"
                         aria-selected="false">Curtidos</button>
-                    <button class="profile-tab" type="button" data-profile-tab="favorites" role="tab"
-                        aria-selected="false">Favoritos</button>
+                    <button class="profile-tab" id="profileTabSaved" type="button" data-profile-tab="favorites" role="tab"
+                        aria-selected="false">Salvos</button>
                 </div>
                 <h3 class="profile-videos-title">Meus vídeos</h3>
                 <div class="profile-videos" id="profile-videos"></div>
@@ -461,7 +695,7 @@
         <footer class="app-footer">
             <div class="footer-item" id="btnInicio">
                 <i class="ri-home-9-fill"></i>
-                <span>inicio</span>
+                <span>Início</span>
             </div>
 
             <button class="footer-item" id="btnDiscover" type="button" aria-label="Descobrir vídeos">

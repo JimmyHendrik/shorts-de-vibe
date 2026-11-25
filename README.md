@@ -27,6 +27,14 @@ php artisan key:generate
 php artisan migrate
 ```
 
+### Sugestões de localização
+
+O preenchimento automático de localização é opcional. Para ativá-lo, configure
+uma chave do Google Maps com a API Places habilitada no atributo
+`data-google-maps-api-key` do `<body>` em `index.html`, com restrição por
+referenciador para os domínios do frontend. Sem a chave ou se o serviço estiver
+indisponível, a localização ainda pode ser informada manualmente.
+
 ### Certificado TLS do PHP no Windows
 
 Se o login com Google voltar com o erro `cURL error 60: SSL certificate problem`, configure um bundle de certificados confiável para as chamadas OAuth do backend. No terminal da raiz do projeto:

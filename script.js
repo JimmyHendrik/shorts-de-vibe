@@ -36,6 +36,8 @@ let feedMode = 'discover';
 let activeVideoId = null;
 let activeVideoElement = null;
 const viewedVideoIds = new Set();
+const SAVED_VIDEOS_STORAGE_KEY = 'vibe_saved_videos_v1';
+const DIRECT_MESSAGES_STORAGE_KEY = 'vibe_direct_messages_v1';
 let authToken = sessionStorage.getItem('vibe_auth_token');
 let authenticatedUser = null;
 let authMode = 'login';
@@ -60,6 +62,121 @@ const {
     setPlayIconState,
     atualizarBarraProgresso,
 } = window.VibeVideoUi(formatTime);
+
+function readSavedVideoStore() {
+    try {
+        const store = JSON.parse(localStorage.getItem(SAVED_VIDEOS_STORAGE_KEY) || '{}');
+        return store && typeof store === 'object' && store.users && typeof store.users === 'object'
+            ? store
+            : { version: 1, users: {} };
+    } catch {
+        return { version: 1, users: {} };
+    }
+}
+
+function getSavedVideoBucket(userId = authenticatedUser?.id) {
+    if (userId === null || userId === undefined) return null;
+    const bucket = readSavedVideoStore().users[String(userId)];
+    if (!bucket || typeof bucket !== 'object') return { knownIds: [], videos: [] };
+    return {
+        knownIds: Array.isArray(bucket.knownIds) ? bucket.knownIds.map(String) : [],
+        videos: Array.isArray(bucket.videos) ? bucket.videos : [],
+    };
+}
+
+function getLocalSavedVideoState(videoId) {
+    const bucket = getSavedVideoBucket();
+    if (!bucket) return null;
+    const id = String(videoId);
+    if (!bucket.knownIds.includes(id)) return null;
+    return bucket.videos.some(video => String(video.id) === id);
+}
+
+function storeSavedVideoState(video, isSaved, userId = authenticatedUser?.id) {
+    if (!video?.id || userId === null || userId === undefined) return false;
+    try {
+        const store = readSavedVideoStore();
+        const userKey = String(userId);
+        const bucket = getSavedVideoBucket(userId) || { knownIds: [], videos: [] };
+        const videoId = String(video.id);
+        const knownIds = new Set([...bucket.knownIds, videoId]);
+        const videos = bucket.videos.filter(item => String(item.id) !== videoId);
+        if (isSaved) {
+            videos.push({
+                id: video.id,
+                src: video.src || video.video_url || '',
+                video_url: video.video_url || video.src || '',
+                thumbnail_url: video.thumbnail_url || '',
+                description: video.description || '',
+                view_count: Number(video.view_count) || 0,
+                likes_count: Number(video.likes_count ?? video.likes) || 0,
+                comments_count: Number(video.comments_count ?? video.comments) || 0,
+                duration_seconds: Number(video.duration_seconds) || 0,
+                visibility: video.visibility || 'public',
+                isFavorite: true,
+            });
+        }
+        store.version = 1;
+        store.users[userKey] = { knownIds: [...knownIds], videos };
+        localStorage.setItem(SAVED_VIDEOS_STORAGE_KEY, JSON.stringify(store));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function mergeLocalSavedVideos(serverVideos = []) {
+    const bucket = getSavedVideoBucket();
+    if (!bucket) return serverVideos;
+    const savedIds = new Set(bucket.videos.map(video => String(video.id)));
+    const knownIds = new Set(bucket.knownIds);
+    const merged = serverVideos.filter(video => !knownIds.has(String(video.id)) || savedIds.has(String(video.id)));
+    const displayedIds = new Set(merged.map(video => String(video.id)));
+    bucket.videos.forEach(video => {
+        if (!displayedIds.has(String(video.id))) merged.push(video);
+    });
+    return merged;
+}
+
+function isOptionalIntegrationError(error) {
+    return [404, 405, 500, 501].includes(Number(error?.status)) || error?.status === undefined;
+}
+
+function readLocalDirectMessages() {
+    try {
+        const store = JSON.parse(localStorage.getItem(DIRECT_MESSAGES_STORAGE_KEY) || '{}');
+        return store && typeof store === 'object' && store.users && typeof store.users === 'object'
+            ? store
+            : { version: 1, users: {} };
+    } catch {
+        return { version: 1, users: {} };
+    }
+}
+
+function getLocalDirectMessageThread(recipientId) {
+    if (!authenticatedUser) return [];
+    const store = readLocalDirectMessages();
+    const userThreads = store.users[String(authenticatedUser.id)] || {};
+    const thread = userThreads[String(recipientId)];
+    return Array.isArray(thread) ? thread : [];
+}
+
+function saveLocalDirectMessage(recipientId, message) {
+    if (!authenticatedUser) return false;
+    try {
+        const store = readLocalDirectMessages();
+        const userId = String(authenticatedUser.id);
+        const recipientKey = String(recipientId);
+        const userThreads = store.users[userId] || {};
+        userThreads[recipientKey] = [...(Array.isArray(userThreads[recipientKey]) ? userThreads[recipientKey] : []), message].slice(-500);
+        store.version = 1;
+        store.users[userId] = userThreads;
+        localStorage.setItem(DIRECT_MESSAGES_STORAGE_KEY, JSON.stringify(store));
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 // --- 2. Renderização ---
 
@@ -151,8 +268,11 @@ function createVideoElement(data) {
     views.textContent = `${formatCount(data.view_count)} visualizações`;
     videoUser.appendChild(views);
     if (data.location) {
-        const location = document.createElement('small');
+        const location = document.createElement('a');
         location.className = 'video-location';
+        location.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(data.location)}`;
+        location.target = '_blank';
+        location.rel = 'noopener noreferrer';
         location.textContent = `📍 ${data.location}`;
         videoUser.appendChild(location);
     }
@@ -165,10 +285,15 @@ function createVideoElement(data) {
 
     const sidebar = document.createElement('div');
     sidebar.className = 'video-sidebar';
+    const localSavedState = getLocalSavedVideoState(data.id);
+    const isFavorite = localSavedState === null ? Boolean(data.isFavorite) : localSavedState;
+    const favoritesCount = localSavedState === null
+        ? Number(data.favorites) || 0
+        : Math.max(0, (Number(data.favorites) || 0) + Number(isFavorite) - Number(Boolean(data.isFavorite)));
     sidebar.append(
         createSidebarAction('like', 'ri-poker-hearts-fill', data.likes, 'Curtir vídeo', data.isLiked),
         createSidebarAction('comment', 'ri-chat-1-fill', data.comments, 'Abrir comentários'),
-        createSidebarAction('favorite', 'ri-bookmark-fill', data.favorites, 'Salvar vídeo', data.isFavorite),
+        createSidebarAction('favorite', 'ri-bookmark-fill', favoritesCount, isFavorite ? 'Remover dos favoritos' : 'Salvar vídeo', isFavorite),
         createSidebarAction('share', 'ri-share-forward-fill', data.shares, 'Compartilhar vídeo'),
         createSidebarAction('more', 'ri-more-2-fill', null, 'Mais opções do vídeo'),
     );
@@ -462,6 +587,9 @@ const publishProgress = document.getElementById('publish-progress');
 const publishProgressCircle = document.getElementById('publish-progress-circle');
 const publishProgressValue = document.getElementById('publish-progress-value');
 const publishProgressLabel = document.getElementById('publish-progress-label');
+const publishDropzone = document.getElementById('publish-dropzone');
+const publishBtnHashtag = document.getElementById('publish-btn-hashtag');
+const publishBtnMention = document.getElementById('publish-btn-mention');
 const welcomeGate = document.getElementById('welcome-gate');
 const welcomeLogin = document.getElementById('welcome-login');
 const welcomeVisitor = document.getElementById('welcome-visitor');
@@ -524,6 +652,7 @@ document.querySelectorAll('[data-password-toggle]').forEach(button => {
 const profileModal = document.getElementById('profile-modal');
 const closeProfile = document.querySelector('.close-profile');
 const profileAvatar = document.getElementById('profile-avatar');
+const editProfileAvatar = document.getElementById('editProfileAvatarImg');
 const profileCover = document.getElementById('profile-cover');
 const profileAvatarUpload = document.getElementById('profile-avatar-upload');
 const profileImageInput = document.getElementById('profile-image-input');
@@ -549,6 +678,7 @@ const profileVideoViewerClose = document.getElementById('profile-video-viewer-cl
 const profileVideosTitle = document.querySelector('.profile-videos-title');
 const profileEdit = document.getElementById('profile-edit');
 const profileFollow = document.getElementById('profile-follow');
+const profileMessageButton = document.getElementById('profileMessageBtn');
 const profileShare = document.getElementById('profile-share');
 const profilePlaylists = document.getElementById('profile-playlists');
 const profileHiddenUsers = document.getElementById('profile-hidden-users');
@@ -586,7 +716,7 @@ let cropDragging = false;
 let cropDragStart = null;
 const notificationsModal = document.getElementById('notifications-modal');
 const notificationsList = document.getElementById('notifications-list');
-const notificationBadge = document.getElementById('notification-badge');
+const notificationBadges = document.querySelectorAll('.notification-badge');
 const closeNotifications = document.querySelector('.close-notifications');
 const notificationTabAll = document.getElementById('notifications-tab-all');
 const notificationTabMentions = document.getElementById('notifications-tab-mentions');
@@ -598,6 +728,16 @@ const interestOptions = document.getElementById('interest-options');
 const saveInterestsButton = document.getElementById('save-interests');
 const skipInterestsButton = document.getElementById('skip-interests');
 const interestsError = document.getElementById('interests-error');
+const legalModal = document.getElementById('legal-modal');
+const legalTitle = document.getElementById('legal-title');
+const legalContent = document.getElementById('legal-content');
+const directMessagesModal = document.getElementById('directMessagesModal');
+const directMessagesTitle = document.getElementById('directMessagesTitle');
+const directMessagesStatus = document.getElementById('directMessagesStatus');
+const directMessagesList = document.getElementById('directMessagesList');
+const directMessageForm = document.getElementById('directMessageForm');
+const directMessageInput = document.getElementById('directMessageInput');
+const directMessageSend = document.getElementById('directMessageSend');
 
 window.addEventListener('offline', () => setFeedStatus('Você está sem conexão. As ações serão sincronizadas quando a internet voltar.', { visible: true }));
 window.addEventListener('online', () => setFeedStatus('Conexão restaurada. Sincronizando ações pendentes…'));
@@ -642,6 +782,7 @@ let pendingPublishFile = null;
 let publishDetailUrl = null;
 let publishCoverBlob = null;
 const PUBLISH_DRAFT_KEY = 'vibe_publish_draft';
+const MAX_VIDEO_MB = 100;
 
 function interestOptionButtons() {
     return [...interestOptions.querySelectorAll('[data-interest]')];
@@ -1045,6 +1186,7 @@ function fecharPublicacao() {
     publishDescription.value = '';
     publishDescriptionCount.textContent = '0/1000 · # 0/10';
     publishLocation.value = '';
+    fecharSugestoesLocalizacao();
     publishVisibility.value = 'public';
     publishSchedule.value = '';
     publishAllowComments.checked = true;
@@ -1054,6 +1196,7 @@ function fecharPublicacao() {
     publishHighQuality.checked = true;
     atualizarProgressoPublicacao(0, false);
     publishStatus.textContent = 'Escolha uma opção para publicar no Vibe.';
+    publishContent.classList.remove('editor-active');
     publishModal.classList.remove('active');
     publishModal.setAttribute('aria-hidden', 'true');
 }
@@ -1070,6 +1213,8 @@ function prepararPublicacao(file) {
         setFeedStatus('Escolha um arquivo de vídeo válido.', { visible: true });
         return;
     }
+
+
     pendingPublishFile = file;
     if (publishDetailUrl) URL.revokeObjectURL(publishDetailUrl);
     publishDetailUrl = URL.createObjectURL(file);
@@ -1094,6 +1239,7 @@ function prepararPublicacao(file) {
     publishStop.hidden = true;
     publishPreview.hidden = true;
     publishEditor.hidden = false;
+    publishContent.classList.add('editor-active');
     publishStatus.textContent = 'Revise os detalhes antes de publicar.';
     publishModal.classList.add('active');
     publishModal.setAttribute('aria-hidden', 'false');
@@ -1131,6 +1277,13 @@ function desenharFaixaCorte() {
     context.drawImage(publishDetailPreview, 0, 0, width, height);
 }
 
+function formatTimePad(seconds) {
+    const s = Math.max(0, Math.round(seconds));
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
 function atualizarFaixaCorte(previewTime = null) {
     const duration = Number(publishDetailPreview.duration) || 0;
     if (!duration) return;
@@ -1143,7 +1296,7 @@ function atualizarFaixaCorte(previewTime = null) {
     publishTrimEnd.value = end.toFixed(1);
     publishTrimSelection.style.left = `${(start / duration) * 100}%`;
     publishTrimSelection.style.right = `${100 - (end / duration) * 100}%`;
-    publishTrimTime.textContent = `${formatTime(start)} – ${formatTime(end)}`;
+    publishTrimTime.textContent = `${formatTimePad(start)} – ${formatTimePad(end)}`;
     const nextPreviewTime = previewTime === null ? start : previewTime;
     if (publishTrimVideo.readyState >= 1) publishTrimVideo.currentTime = nextPreviewTime;
     if (publishDetailPreview.readyState >= 1) publishDetailPreview.currentTime = nextPreviewTime;
@@ -1160,6 +1313,16 @@ publishDetailPreview.addEventListener('loadedmetadata', () => {
     publishTrimEndRange.value = String(duration);
     desenharFaixaCorte();
     atualizarFaixaCorte();
+    const trimTicks = document.getElementById('publish-trim-ticks');
+    if (trimTicks && duration > 0) {
+        const steps = 7;
+        let ticksHtml = '';
+        for (let i = 0; i <= steps; i++) {
+            const t = (duration / steps) * i;
+            ticksHtml += `<span>${formatTimePad(t)}</span>`;
+        }
+        trimTicks.innerHTML = ticksHtml;
+    }
     if (publishDetailPreview.readyState >= 2) {
         capturarCapaPublicacao();
     } else {
@@ -1225,7 +1388,7 @@ btnUpload.addEventListener('click', () => {
     }
     abrirPublicacao();
 });
-closePublish.addEventListener('click', fecharPublicacao);
+document.querySelectorAll('.close-publish').forEach(btn => btn.addEventListener('click', fecharPublicacao));
 publishModal.addEventListener('click', event => {
     if (event.target === publishModal) fecharPublicacao();
 });
@@ -1233,6 +1396,47 @@ publishFile.addEventListener('click', () => {
     fecharPublicacao();
     videoFileInput.click();
 });
+if (publishDropzone) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+        publishDropzone.addEventListener(eventName, event => {
+            event.preventDefault();
+            event.stopPropagation();
+            publishDropzone.classList.add('dragover');
+        });
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+        publishDropzone.addEventListener(eventName, event => {
+            event.preventDefault();
+            event.stopPropagation();
+            publishDropzone.classList.remove('dragover');
+        });
+    });
+    publishDropzone.addEventListener('drop', event => {
+        const file = event.dataTransfer?.files?.[0];
+        if (!file) return;
+        if (!authenticatedUser) {
+            solicitarAutenticacao('Entre para publicar um vídeo.');
+            return;
+        }
+        if (!file.type.startsWith('video/')) {
+            setFeedStatus('Escolha um arquivo de vídeo válido (MP4 ou WebM).', { visible: true });
+            return;
+        }
+        prepararPublicacao(file);
+    });
+    publishDropzone.addEventListener('click', event => {
+        if (event.target.closest('#publish-file') || event.target.closest('#publish-record')) return;
+        fecharPublicacao();
+        videoFileInput.click();
+    });
+    publishDropzone.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            fecharPublicacao();
+            videoFileInput.click();
+        }
+    });
+}
 publishRecord.addEventListener('click', async () => {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
         publishStatus.textContent = 'Seu dispositivo não permite gravação pelo navegador.';
@@ -1320,6 +1524,22 @@ publishDescription.addEventListener('input', () => {
     atualizarContadorDescricao();
     salvarRascunhoPublicacao();
 });
+function inserirAtalhoDescricao(prefixo) {
+    if (!publishDescription) return;
+    const start = publishDescription.selectionStart ?? publishDescription.value.length;
+    const end = publishDescription.selectionEnd ?? publishDescription.value.length;
+    const val = publishDescription.value;
+    const needsSpace = start > 0 && !/\s$/.test(val.slice(0, start));
+    const toInsert = (needsSpace ? ' ' : '') + prefixo;
+    publishDescription.value = val.slice(0, start) + toInsert + val.slice(end);
+    const newPos = start + toInsert.length;
+    publishDescription.setSelectionRange(newPos, newPos);
+    publishDescription.focus();
+    atualizarContadorDescricao();
+    salvarRascunhoPublicacao();
+}
+publishBtnHashtag?.addEventListener('click', () => inserirAtalhoDescricao('#'));
+publishBtnMention?.addEventListener('click', () => inserirAtalhoDescricao('@'));
 function salvarRascunhoPublicacao() {
     try {
         localStorage.setItem(PUBLISH_DRAFT_KEY, JSON.stringify({
@@ -1335,7 +1555,164 @@ function salvarRascunhoPublicacao() {
         }));
     } catch { /* armazenamento indisponível não impede a publicação */ }
 }
-publishLocation.addEventListener('input', salvarRascunhoPublicacao);
+const GOOGLE_MAPS_API_KEY = document.body.dataset.googleMapsApiKey || window.GOOGLE_MAPS_API_KEY || '';
+const publishLocationGps = document.getElementById('publish-location-gps');
+const publishLocationDropdown = document.getElementById('publish-location-dropdown');
+
+let googlePlacesLoaded = null;
+let autocompleteSessionToken = null;
+let locationSearchTimer = null;
+
+function carregarGooglePlaces() {
+    if (!GOOGLE_MAPS_API_KEY) {
+        return Promise.reject(new Error('Google Maps não está configurado neste ambiente.'));
+    }
+    if (googlePlacesLoaded) return googlePlacesLoaded;
+    googlePlacesLoaded = new Promise((resolve, reject) => {
+        if (window.google?.maps?.places) {
+            resolve(window.google.maps);
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&libraries=places,geocoding&language=pt-BR&region=BR&loading=async`;
+        script.async = true;
+        script.onload = async () => {
+            try {
+                await google.maps.importLibrary('places');
+                resolve(window.google.maps);
+            } catch {
+                googlePlacesLoaded = null;
+                script.remove();
+                reject(new Error('Google Maps indisponível.'));
+            }
+        };
+        script.onerror = () => {
+            googlePlacesLoaded = null;
+            script.remove();
+            reject(new Error('Google Maps indisponível.'));
+        };
+        document.head.appendChild(script);
+    });
+    return googlePlacesLoaded;
+}
+
+function fecharSugestoesLocalizacao() {
+    if (!publishLocationDropdown) return;
+    publishLocationDropdown.hidden = true;
+    publishLocationDropdown.replaceChildren();
+}
+
+publishLocation.addEventListener('input', () => {
+    salvarRascunhoPublicacao();
+    clearTimeout(locationSearchTimer);
+    const input = publishLocation.value.trim();
+
+    if (input.length < 3) {
+        fecharSugestoesLocalizacao();
+        return;
+    }
+    if (!GOOGLE_MAPS_API_KEY) {
+        fecharSugestoesLocalizacao();
+        publishStatus.textContent = 'Sugestões de endereço indisponíveis; você pode informar o local manualmente.';
+        return;
+    }
+
+    locationSearchTimer = setTimeout(async () => {
+        try {
+            const maps = await carregarGooglePlaces();
+            if (!autocompleteSessionToken) {
+                autocompleteSessionToken = new maps.places.AutocompleteSessionToken();
+            }
+
+            const { suggestions } = await maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+                input,
+                sessionToken: autocompleteSessionToken,
+                language: 'pt-BR',
+                region: 'br',
+            });
+
+            if (!suggestions?.length || !publishLocationDropdown) {
+                fecharSugestoesLocalizacao();
+                return;
+            }
+
+            publishLocationDropdown.replaceChildren();
+            suggestions.slice(0, 5).forEach(suggestion => {
+                const text = suggestion.placePrediction?.text?.toString();
+                if (!text) return;
+
+                const li = document.createElement('li');
+                const icon = document.createElement('i');
+                icon.className = 'ri-map-pin-2-line';
+                const label = document.createElement('span');
+                label.textContent = text;
+                li.append(icon, label);
+
+                li.addEventListener('click', () => {
+                    publishLocation.value = text;
+                    autocompleteSessionToken = null;
+                    fecharSugestoesLocalizacao();
+                    salvarRascunhoPublicacao();
+                });
+
+                publishLocationDropdown.appendChild(li);
+            });
+
+            publishLocationDropdown.hidden = publishLocationDropdown.children.length === 0;
+        } catch {
+            fecharSugestoesLocalizacao();
+            publishStatus.textContent = 'Sugestões de endereço indisponíveis; você pode informar o local manualmente.';
+        }
+    }, 400);
+});
+
+publishLocationGps?.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+        publishStatus.textContent = 'Seu navegador não suporta geolocalização.';
+        return;
+    }
+
+    publishLocationGps.disabled = true;
+    publishStatus.textContent = 'Obtendo sua localização atual…';
+
+    navigator.geolocation.getCurrentPosition(
+        async position => {
+            try {
+                const maps = await carregarGooglePlaces();
+                const { Geocoder } = await google.maps.importLibrary('geocoding');
+                const geocoder = new Geocoder();
+                const { results } = await geocoder.geocode({
+                    location: {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                    },
+                });
+
+                const preferred = results.find(r => r.types.includes('sublocality') || r.types.includes('locality')) || results[0];
+                if (preferred) {
+                    publishLocation.value = preferred.formatted_address.replace(/, \d{5}-\d{3}/, '').replace(/, Brasil$/, '');
+                    salvarRascunhoPublicacao();
+                    publishStatus.textContent = 'Localização preenchida.';
+                }
+            } catch {
+                publishStatus.textContent = 'Não foi possível converter as coordenadas em endereço.';
+            } finally {
+                publishLocationGps.disabled = false;
+            }
+        },
+        () => {
+            publishLocationGps.disabled = false;
+            publishStatus.textContent = 'Permissão de localização negada no navegador.';
+        },
+        { enableHighAccuracy: false, timeout: 8000 }
+    );
+});
+
+document.addEventListener('click', event => {
+    if (!event.target.closest('#publish-location') && !event.target.closest('#publish-location-dropdown')) {
+        fecharSugestoesLocalizacao();
+    }
+});
 publishVisibility.addEventListener('change', salvarRascunhoPublicacao);
 publishAllowComments.addEventListener('change', salvarRascunhoPublicacao);
 publishSchedule.addEventListener('change', salvarRascunhoPublicacao);
@@ -1343,6 +1720,23 @@ publishAllowReuse.addEventListener('change', salvarRascunhoPublicacao);
 publishAiGenerated.addEventListener('change', salvarRascunhoPublicacao);
 publishAgeRestricted.addEventListener('change', salvarRascunhoPublicacao);
 publishHighQuality.addEventListener('change', salvarRascunhoPublicacao);
+
+function formatScheduledAtForApi(value) {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (!match) return null;
+    const [, yearText, monthText, dayText, hourText, minuteText] = match;
+    const secondText = match[6] || '00';
+    const date = new Date(`${yearText}-${monthText}-${dayText}T${hourText}:${minuteText}:${secondText}`);
+    if (Number.isNaN(date.getTime())
+        || date.getFullYear() !== Number(yearText)
+        || date.getMonth() + 1 !== Number(monthText)
+        || date.getDate() !== Number(dayText)
+        || date.getHours() !== Number(hourText)
+        || date.getMinutes() !== Number(minuteText)
+        || date.getSeconds() !== Number(secondText)) return null;
+    return `${yearText}-${monthText}-${dayText} ${hourText}:${minuteText}:${secondText}`;
+}
+
 publishSubmit.addEventListener('click', async () => {
     if (!pendingPublishFile) return;
     if (!authToken || !authenticatedUser) {
@@ -1355,21 +1749,32 @@ publishSubmit.addEventListener('click', async () => {
         publishDescription.focus();
         return;
     }
+    const scheduledAt = publishSchedule.value ? formatScheduledAtForApi(publishSchedule.value) : null;
+    if (publishSchedule.value && !scheduledAt) {
+        publishStatus.textContent = 'Escolha uma data e hora válidas para agendar a publicação.';
+        publishSchedule.focus();
+        return;
+    }
     const originalFile = pendingPublishFile;
     const metadata = {
         description: publishDescription.value.trim(),
         location: publishLocation.value.trim(),
         visibility: publishVisibility.value,
-        scheduled_at: publishSchedule.value || null,
+        scheduled_at: scheduledAt,
         allow_comments: publishAllowComments.checked,
         allow_reuse: publishAllowReuse.checked,
         is_ai_generated: publishAiGenerated.checked,
         age_restricted: publishAgeRestricted.checked,
         high_quality: publishHighQuality.checked,
     };
-    publishSubmit.disabled = true;
+        publishSubmit.disabled = true;
     publishStatus.textContent = 'Preparando o vídeo…';
     const file = await cortarVideoSeNecessario(originalFile);
+    if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
+        publishStatus.textContent = `O vídeo ficou com ${Math.round(file.size / 1048576)} MB e o limite é ${MAX_VIDEO_MB} MB. Corte um trecho menor ou converta para 1080p antes de enviar.`;
+        publishSubmit.disabled = false;
+        return;
+    }
     void publicarVideo(file, metadata);
 });
 audioUnlockButton.addEventListener('click', () => {
@@ -1528,6 +1933,25 @@ profileForm.addEventListener('submit', event => {
     event.preventDefault();
     void salvarPerfil();
 });
+document.getElementById('profile-edit-avatar').addEventListener('input', event => {
+    editProfileAvatar.src = safeMediaUrl(event.target.value.trim()) || 'img/vibe-mark.png';
+});
+profileMessageButton.addEventListener('click', () => void abrirMensagensDiretas());
+document.querySelector('.close-direct-messages').addEventListener('click', fecharMensagensDiretas);
+directMessagesModal.addEventListener('click', event => {
+    if (event.target === directMessagesModal) fecharMensagensDiretas();
+});
+directMessageForm.addEventListener('submit', event => {
+    event.preventDefault();
+    void enviarMensagemDireta();
+});
+document.querySelector('.close-legal').addEventListener('click', fecharModalLegal);
+legalModal.addEventListener('click', event => {
+    if (event.target === legalModal) fecharModalLegal();
+});
+document.querySelectorAll('[data-legal-document]').forEach(button => {
+    button.addEventListener('click', () => abrirModalLegal(button.dataset.legalDocument));
+});
 profileTabs.forEach(tab => {
     tab.addEventListener('click', () => void abrirPerfil(tab.dataset.profileTab || 'videos'));
 });
@@ -1553,6 +1977,8 @@ document.addEventListener('keydown', event => {
     }
     if (authModal.classList.contains('active')) fecharAutenticacao();
     else if (profileModal.classList.contains('active')) fecharPerfil();
+    else if (directMessagesModal.classList.contains('active')) fecharMensagensDiretas();
+    else if (legalModal.classList.contains('active')) fecharModalLegal();
     else if (notificationsModal.classList.contains('active')) fecharNotificacoes();
     else if (videoOptionsModal.classList.contains('active')) fecharOpcoesVideo();
     else if (profileImageViewer.classList.contains('active')) fecharVisualizadorImagemPerfil();
@@ -2171,6 +2597,188 @@ profileNavAvatar.addEventListener('error', () => {
 let profileTargetUserId = null;
 let viewingOwnProfile = true;
 let profileActiveTab = 'videos';
+let directMessageRecipientId = null;
+let directMessageThread = [];
+let directMessageRequestId = 0;
+
+function abrirModalLegal(documentType) {
+    const legalDocuments = {
+        terms: {
+            title: 'Termos de Uso',
+            paragraphs: [
+                'Use o Vibe de forma responsável e publique apenas conteúdos que você tenha direito de compartilhar.',
+                'Respeite os demais usuários e não utilize a plataforma para atividades ilegais, abusivas ou que violem direitos de terceiros.',
+            ],
+        },
+        privacy: {
+            title: 'Política de Privacidade',
+            paragraphs: [
+                'O Vibe utiliza os dados da conta e as informações fornecidas durante o uso para oferecer recursos como perfil, feed e interação.',
+                'Não compartilhe informações pessoais sensíveis em conteúdos ou mensagens. Consulte a política oficial do serviço antes de fornecer dados adicionais.',
+            ],
+        },
+    };
+    const document = legalDocuments[documentType];
+    if (!document) return;
+    legalTitle.textContent = document.title;
+    legalContent.replaceChildren(...document.paragraphs.map(text => {
+        const paragraph = window.document.createElement('p');
+        paragraph.textContent = text;
+        return paragraph;
+    }));
+    legalModal.classList.add('active');
+    legalModal.setAttribute('aria-hidden', 'false');
+}
+
+function fecharModalLegal() {
+    legalModal.classList.remove('active');
+    legalModal.setAttribute('aria-hidden', 'true');
+}
+
+function renderizarMensagensDiretas(messages) {
+    directMessagesList.replaceChildren();
+    if (!messages.length) {
+        const empty = window.document.createElement('p');
+        empty.className = 'notifications-empty';
+        empty.textContent = 'Ainda não há mensagens nesta conversa.';
+        directMessagesList.appendChild(empty);
+        return;
+    }
+
+    messages.forEach(message => {
+        const item = window.document.createElement('article');
+        const isOwnMessage = String(message.sender_id ?? message.sender?.id ?? '') === String(authenticatedUser?.id ?? '');
+        item.className = `direct-message${isOwnMessage ? ' is-own-message' : ''}`;
+        const author = window.document.createElement('strong');
+        author.textContent = isOwnMessage ? 'Você' : `@${message.sender?.username || directMessageRecipientUsername()}`;
+        const body = window.document.createElement('p');
+        body.textContent = String(message.body || message.content || message.text || '');
+        item.append(author, body);
+        if (message.created_at) {
+            const timestamp = new Date(message.created_at);
+            if (!Number.isNaN(timestamp.getTime())) {
+                const time = window.document.createElement('time');
+                time.dateTime = timestamp.toISOString();
+                time.textContent = timestamp.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                item.appendChild(time);
+            }
+        }
+        directMessagesList.appendChild(item);
+    });
+    directMessagesList.scrollTop = directMessagesList.scrollHeight;
+}
+
+function directMessageRecipientUsername() {
+    return String(profileUsername.textContent || '@usuário').replace(/^@/, '');
+}
+
+async function abrirMensagensDiretas() {
+    if (!authenticatedUser) {
+        solicitarAutenticacao('Entre para enviar mensagens.');
+        return;
+    }
+    if (!profileTargetUserId || viewingOwnProfile) return;
+
+    const requestId = ++directMessageRequestId;
+    directMessageRecipientId = String(profileTargetUserId);
+    directMessageThread = [];
+    directMessagesTitle.textContent = `Mensagens com @${directMessageRecipientUsername()}`;
+    directMessagesStatus.textContent = 'Carregando conversa...';
+    directMessagesList.replaceChildren();
+    directMessagesModal.classList.add('active');
+    directMessagesModal.setAttribute('aria-hidden', 'false');
+    try {
+        const payload = await apiRequest(`/messages?user_id=${encodeURIComponent(directMessageRecipientId)}`);
+        if (requestId !== directMessageRequestId) return;
+        const responseData = payload?.data;
+        const serverMessages = Array.isArray(responseData)
+            ? responseData
+            : Array.isArray(responseData?.data)
+                ? responseData.data
+                : Array.isArray(responseData?.messages) ? responseData.messages : [];
+        const localMessages = getLocalDirectMessageThread(directMessageRecipientId);
+        const messageKey = message => message.id
+            ? `id:${message.id}`
+            : `${message.sender_id || ''}|${message.body || message.content || ''}|${message.created_at || ''}`;
+        const knownMessageKeys = new Set(serverMessages.map(messageKey));
+        directMessageThread = [
+            ...serverMessages,
+            ...localMessages.filter(message => !knownMessageKeys.has(messageKey(message))),
+        ];
+        directMessagesStatus.textContent = '';
+        renderizarMensagensDiretas(directMessageThread);
+    } catch (error) {
+        if (requestId !== directMessageRequestId) return;
+        if (error.status === 401) {
+            directMessagesStatus.textContent = 'Sua sessão expirou. Entre novamente para ver as mensagens.';
+            limparSessao();
+            return;
+        }
+        if (isOptionalIntegrationError(error)) {
+            directMessagesStatus.textContent = 'Mensagens locais: a API ainda não está disponível neste ambiente.';
+            directMessageThread = getLocalDirectMessageThread(directMessageRecipientId);
+            renderizarMensagensDiretas(directMessageThread);
+            return;
+        }
+        directMessagesStatus.textContent = 'Não foi possível carregar esta conversa.';
+    }
+}
+
+function fecharMensagensDiretas() {
+    directMessageRequestId += 1;
+    directMessagesModal.classList.remove('active');
+    directMessagesModal.setAttribute('aria-hidden', 'true');
+}
+
+async function enviarMensagemDireta() {
+    const body = directMessageInput.value.trim();
+    if (!body || !directMessageRecipientId || !authenticatedUser || directMessageSend.disabled) return;
+    const recipientId = directMessageRecipientId;
+    const requestId = directMessageRequestId;
+    const message = {
+        sender_id: authenticatedUser.id,
+        recipient_id: recipientId,
+        body,
+        created_at: new Date().toISOString(),
+    };
+    directMessageSend.disabled = true;
+    directMessagesStatus.textContent = '';
+    try {
+        const apiRecipientId = /^\d+$/.test(recipientId) ? Number(recipientId) : recipientId;
+        const payload = await apiRequest('/messages', {
+            method: 'POST',
+            body: { recipient_id: apiRecipientId, body },
+        });
+        const savedMessage = { ...message, ...(payload?.data?.message || payload?.data || payload?.message || {}) };
+        saveLocalDirectMessage(recipientId, savedMessage);
+        if (requestId !== directMessageRequestId) return;
+        directMessageThread = [...directMessageThread, savedMessage];
+        directMessageInput.value = '';
+        directMessagesStatus.textContent = '';
+        renderizarMensagensDiretas(directMessageThread);
+    } catch (error) {
+        if (error.status === 401) {
+            directMessagesStatus.textContent = 'Sua sessão expirou. Entre novamente para enviar mensagens.';
+            limparSessao();
+            return;
+        }
+        if (!isOptionalIntegrationError(error)) {
+            directMessagesStatus.textContent = 'Não foi possível enviar esta mensagem.';
+            return;
+        }
+        if (!saveLocalDirectMessage(recipientId, message)) {
+            directMessagesStatus.textContent = 'Não foi possível salvar a mensagem neste dispositivo.';
+            return;
+        }
+        if (requestId !== directMessageRequestId) return;
+        directMessageThread = [...directMessageThread, message];
+        directMessageInput.value = '';
+        directMessagesStatus.textContent = 'Mensagem salva apenas neste dispositivo.';
+        renderizarMensagensDiretas(directMessageThread);
+    } finally {
+        directMessageSend.disabled = false;
+    }
+}
 
 function renderizarPerfil(data) {
     const user = data.user;
@@ -2182,6 +2790,7 @@ function renderizarPerfil(data) {
         tab.hidden = !viewingOwnProfile && tab.dataset.profileTab !== 'videos';
     });
     profileAvatar.src = safeMediaUrl(user.avatar_url) || 'img/vibe-mark.png';
+    editProfileAvatar.src = profileAvatar.src;
     profileCover.src = safeMediaUrl(user.cover_url) || '';
     profileCover.parentElement.classList.toggle('has-image', Boolean(user.cover_url));
     profileName.textContent = user.name || 'Vibe';
@@ -2207,6 +2816,7 @@ function renderizarPerfil(data) {
     profileAnalytics.hidden = !viewingOwnProfile;
     profileFollow.hidden = viewingOwnProfile;
     profileFollow.textContent = user.is_following ? 'Seguindo' : 'Seguir';
+    profileMessageButton.hidden = viewingOwnProfile;
     profileShare.hidden = false;
     profileTitle.textContent = viewingOwnProfile ? 'Meu perfil' : 'Perfil';
     profileTargetUserId = user.id;
@@ -2224,7 +2834,7 @@ function renderizarPerfil(data) {
     if (!data.videos?.length) {
         const empty = document.createElement('p');
         empty.className = 'profile-empty';
-        empty.textContent = 'Você ainda não publicou vídeos.';
+        empty.textContent = profileActiveTab === 'favorites' ? 'Você ainda não salvou vídeos.' : 'Você ainda não publicou vídeos.';
         profileVideos.appendChild(empty);
         return;
     }
@@ -2375,8 +2985,21 @@ async function abrirPerfil(tab = 'videos', userId = null) {
     try {
         const endpoint = viewingOwnProfile ? '/auth/profile' : `/users/${encodeURIComponent(userId)}`;
         const payload = await apiRequest(`${endpoint}?tab=${encodeURIComponent(tab)}`, { includeAuth: Boolean(authToken) });
+        if (viewingOwnProfile && tab === 'favorites') {
+            payload.videos = mergeLocalSavedVideos(payload.videos || []);
+        }
         renderizarPerfil(payload);
     } catch (error) {
+        if (viewingOwnProfile && tab === 'favorites' && isOptionalIntegrationError(error)) {
+            try {
+                const payload = await apiRequest('/auth/profile?tab=videos');
+                payload.videos = mergeLocalSavedVideos([]);
+                renderizarPerfil(payload);
+                return;
+            } catch {
+                // O perfil ainda pode ser exibido pelos dados salvos localmente quando a API de favoritos está fora do ar.
+            }
+        }
         if (error.status === 401) {
             limparSessao();
             fecharPerfil();
@@ -2569,7 +3192,9 @@ async function carregarPlaylists() {
                     count.textContent = `${playlist.videos_count} vídeos`;
                 } catch (error) {
                     add.disabled = false;
-                    setFeedStatus(error.message || 'Não foi possível adicionar o vídeo à playlist.', { visible: true });
+                    setFeedStatus(isOptionalIntegrationError(error)
+                        ? 'Playlists indisponíveis neste ambiente.'
+                        : error.message || 'Não foi possível adicionar o vídeo à playlist.', { visible: true });
                 }
             });
             item.appendChild(add);
@@ -2577,8 +3202,12 @@ async function carregarPlaylists() {
         playlistsList.appendChild(item);
         });
     } catch (error) {
-        playlistsList.innerHTML = '<p class="notifications-empty">Não foi possível carregar as playlists.</p>';
-        setFeedStatus(error.message || 'Não foi possível carregar as playlists.', { visible: true });
+        showTextMessage(playlistsList, isOptionalIntegrationError(error)
+            ? 'Playlists indisponíveis neste ambiente. Tente novamente mais tarde.'
+            : error.message || 'Não foi possível carregar as playlists.');
+        if (!isOptionalIntegrationError(error)) {
+            setFeedStatus(error.message || 'Não foi possível carregar as playlists.', { visible: true });
+        }
     }
 }
 
@@ -2630,7 +3259,9 @@ async function abrirDetalhePlaylist(playlistId, playlistName) {
         });
         playlistsList.appendChild(grid);
     } catch (error) {
-        showTextMessage(playlistsList, error.message || 'Não foi possível abrir a playlist.');
+        showTextMessage(playlistsList, isOptionalIntegrationError(error)
+            ? 'Esta playlist não está disponível neste ambiente.'
+            : error.message || 'Não foi possível abrir a playlist.');
     }
 }
 
@@ -2649,7 +3280,11 @@ async function criarPlaylist() {
         playlistForm.reset();
         await carregarPlaylists();
     } catch (error) {
-        setFeedStatus(error.message || 'Não foi possível criar a playlist.', { visible: true });
+        if (isOptionalIntegrationError(error)) {
+            showTextMessage(playlistsList, 'Criação de playlists indisponível neste ambiente.');
+        } else {
+            setFeedStatus(error.message || 'Não foi possível criar a playlist.', { visible: true });
+        }
     }
 }
 
@@ -2699,7 +3334,10 @@ async function abrirNotificacoes(onlyMentions = false) {
         }
         atualizarBadgeNotificacoes(0);
     } catch (error) {
-        showTextMessage(notificationsList, error.message || 'Não foi possível carregar as notificações.');
+        updateNotificationBadges(0);
+        showTextMessage(notificationsList, isOptionalIntegrationError(error)
+            ? 'Notificações indisponíveis neste ambiente. Tente novamente mais tarde.'
+            : error.message || 'Não foi possível carregar as notificações.');
     }
 }
 
@@ -2783,20 +3421,26 @@ notificationTabMentions?.addEventListener('click', () => selecionarAbaNotificaco
 notificationTabHistory?.addEventListener('click', () => selecionarAbaNotificacoes(notificationTabHistory));
 notificationTabModeration?.addEventListener('click', () => selecionarAbaNotificacoes(notificationTabModeration));
 
+function updateNotificationBadges(count) {
+    const safeCount = Number.isFinite(Number(count)) ? Math.max(0, Math.floor(Number(count))) : 0;
+    notificationBadges.forEach(badge => {
+        badge.textContent = safeCount > 99 ? '99+' : String(safeCount);
+        badge.hidden = safeCount < 1;
+    });
+}
+
 async function atualizarBadgeNotificacoes(forcedCount = null) {
-    if (!notificationBadge) return;
     if (!authenticatedUser) {
-        notificationBadge.hidden = true;
+        updateNotificationBadges(0);
         return;
     }
     try {
         const count = forcedCount === null
             ? (await apiRequest('/notifications/unread-count')).data?.count || 0
             : forcedCount;
-        notificationBadge.textContent = count > 99 ? '99+' : String(count);
-        notificationBadge.hidden = count < 1;
+        updateNotificationBadges(count);
     } catch {
-        notificationBadge.hidden = true;
+        updateNotificationBadges(0);
     }
 }
 
@@ -2877,6 +3521,7 @@ async function enviarImagemPerfil(file) {
             authenticatedUser = { ...authenticatedUser, ...payload.user };
             atualizarInterfaceAutenticacao();
             profileAvatar.src = safeMediaUrl(payload.user.avatar_url) || 'img/vibe-mark.png';
+            editProfileAvatar.src = profileAvatar.src;
             profileCover.src = safeMediaUrl(payload.user.cover_url) || '';
             profileCover.parentElement.classList.toggle('has-image', Boolean(payload.user.cover_url));
             document.getElementById('profile-edit-avatar').value = payload.user.avatar_url || '';
@@ -3760,19 +4405,59 @@ async function toggleFavorite(button) {
     }
 
     button.disabled = true;
-    applyStatus(!isFavorite, Math.max(0, previousCount + (isFavorite ? -1 : 1)));
+    const intendedSavedState = !isFavorite;
+    applyStatus(intendedSavedState, Math.max(0, previousCount + (isFavorite ? -1 : 1)));
     try {
-        const payload = await apiRequest(`/videos/${videoId}/favorite`, {
-            method: isFavorite ? 'DELETE' : 'PUT',
-        });
-        applyStatus(payload.data.favorited, payload.data.favorites_count);
-        if (payload.data.favorited) if (typeof registrarSinalVideo === 'function') registrarSinalVideo(video, 2);
+        let payload;
+        try {
+            payload = await apiRequest(`/videos/${videoId}/save`, {
+                method: 'POST',
+                body: { saved: intendedSavedState },
+            });
+        } catch (error) {
+            if (![404, 405, 501].includes(Number(error.status))) throw error;
+            const legacyPayload = await apiRequest(`/videos/${videoId}/favorite`, {
+                method: isFavorite ? 'DELETE' : 'PUT',
+            });
+            payload = {
+                ...legacyPayload,
+                data: {
+                    ...legacyPayload?.data,
+                    saved: legacyPayload?.data?.favorited,
+                    saved_count: legacyPayload?.data?.favorites_count,
+                },
+            };
+        }
+        const saved = Boolean(payload?.data?.saved ?? payload?.data?.is_saved ?? payload?.data?.favorited ?? intendedSavedState);
+        const savedCount = Number(payload?.data?.saved_count ?? payload?.data?.favorites_count ?? payload?.data?.favorites ?? previousCount + (isFavorite ? -1 : 1));
+        applyStatus(saved, Math.max(0, savedCount));
+        if (!storeSavedVideoState(feedVideo || { id: videoId, src: video.src, description: '' }, saved)) {
+            setFeedStatus('Vídeo atualizado, mas não foi possível guardar a sincronização neste dispositivo.', { visible: true });
+        }
+        if (saved && typeof registrarSinalVideo === 'function') registrarSinalVideo(video, 2);
+        if (profileModal.classList.contains('active') && viewingOwnProfile && profileActiveTab === 'favorites') {
+            void abrirPerfil('favorites');
+        }
     } catch (error) {
-        applyStatus(isFavorite, previousCount);
         if (error.status === 401) {
+            applyStatus(isFavorite, previousCount);
             limparSessao();
             solicitarAutenticacao('Sua sessão expirou. Entre novamente para salvar vídeos.');
+        } else if (isOptionalIntegrationError(error)) {
+            if (storeSavedVideoState(feedVideo || { id: videoId, src: video.src, description: '' }, intendedSavedState)) {
+                if (intendedSavedState && typeof registrarSinalVideo === 'function') registrarSinalVideo(video, 2);
+                setFeedStatus(intendedSavedState
+                    ? 'Vídeo salvo neste dispositivo; a API de favoritos está indisponível.'
+                    : 'Vídeo removido dos salvos neste dispositivo.', { visible: true });
+                if (profileModal.classList.contains('active') && viewingOwnProfile && profileActiveTab === 'favorites') {
+                    void abrirPerfil('favorites');
+                }
+            } else {
+                applyStatus(isFavorite, previousCount);
+                setFeedStatus('Não foi possível salvar este vídeo neste dispositivo.', { visible: true });
+            }
         } else {
+            applyStatus(isFavorite, previousCount);
             setFeedStatus('Não foi possível atualizar os favoritos.', { visible: true });
         }
     } finally {
@@ -3886,6 +4571,7 @@ async function publicarVideo(file, metadata = {}) {
     const formData = new FormData();
     formData.append('video', file);
     if (publishCoverBlob) formData.append('thumbnail', publishCoverBlob, `vibe-capa-${Date.now()}.jpg`);
+    if (metadata.scheduled_at) formData.append('scheduled_at', metadata.scheduled_at);
     setFeedStatus('Enviando vídeo…');
     btnUpload.disabled = true;
     publishSubmit.disabled = true;
@@ -3924,7 +4610,15 @@ async function publicarVideo(file, metadata = {}) {
         await loadInitialFeed();
         localStorage.removeItem(PUBLISH_DRAFT_KEY);
         fecharPublicacao();
-        setFeedStatus('Vídeo publicado com sucesso.');
+        if (metadata.scheduled_at) {
+            const scheduledDate = new Date(`${metadata.scheduled_at.replace(' ', 'T')}`);
+            const displayDate = Number.isNaN(scheduledDate.getTime())
+                ? metadata.scheduled_at
+                : scheduledDate.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+            setFeedStatus(`Vídeo agendado para ${displayDate}.`, { visible: true });
+        } else {
+            setFeedStatus('Vídeo publicado com sucesso.');
+        }
     } catch (error) {
         atualizarProgressoPublicacao(0, false);
         if (uploadedAssets && !videoPublished) {
